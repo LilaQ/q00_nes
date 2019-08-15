@@ -1,0 +1,3 @@
+﻿  cpu.cpp
+C:\Users\LilaQ\source\repos\NESEmulator\NESEmulator\cpu.cpp(51,16): warning C4244:  '=': conversion from 'uint16_t' to 'unsigned char', possible loss of data
+  NESEmulator.vcxproj -> C:\Users\LilaQ\source\repos\NESEmulator\Debug\NESEmulator.exe
