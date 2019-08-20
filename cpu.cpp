@@ -179,6 +179,11 @@ uint8_t RRA(uint16_t adr, uint8_t cycles) {
 	return cycles;
 }
 
+void resetCPU() {
+	PC = readFromMem(0xfffd) << 8 | readFromMem(0xfffc);
+	printf("Reset CPU\n");
+}
+
 
 int c = 7;
 int j = 0;
@@ -193,8 +198,8 @@ int stepCPU() {
 	}
 
 	//	Check for NMI
-	if (NMIinterrupt) {
-		printf("NMI occured!\n");
+	/*if (NMIinterrupt) {
+		//printf("NMI occured!\n");
 		writeToMem(SP_ + 0x100, status.status | 0x30); 
 		SP_--;
 		writeToMem(SP_ + 0x100, PC >> 8); 
@@ -202,9 +207,10 @@ int stepCPU() {
 		writeToMem(SP_ + 0x100, PC & 0xff);
 		SP_--;
 		PC = readFromMem(0xfffa) << 8 | readFromMem(0xfffb);
-	}
+		
+	}*/
 
-	//printf("%04x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d\n", PC, registers.A, registers.X, registers.Y, status.status, SP_, j, f, c);
+	//printf("%04x %02x %02x %02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, j, f, c);
 	switch (readFromMem(PC)) {
 		case 0x00: { PC++; status.setBrk(1); return 7; break; }
 		case 0x01: { PC++; return ORA(getIndirectXIndex(PC++, registers.X), 6); break; }

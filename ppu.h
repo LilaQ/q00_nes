@@ -30,6 +30,6 @@ struct PPUCTRL
 		generate_nmi = (val >> 7) & 1;
 
 		//	set actual values
-		ppudata_increment_value = (ppudata_increment) ? 1 : 32;
+		ppudata_increment_value = (ppudata_increment == 0) ? 1 : 32;
 	}
 };

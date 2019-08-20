@@ -16,10 +16,13 @@ void reset() {
 
 //	copy cartridge to memory
 void loadROM(unsigned char c[]) {
-	for (int i = 0; i < 0x10000; i++) {
+	for (int i = 0; i < 0x4000; i++) {
 		//	nestest
-		memory[0xc000 + i] = c[i];
-		memory[0x8000 + i] = c[i];
+		memory[0xc000 + i] = c[i+0x10];
+	}
+	for (int i = 0; i < 0x4000; i++) {
+		//	nestest
+		memory[0x8000 + i] = c[i + 0x4010];
 	}
 }
 
@@ -82,7 +85,7 @@ uint16_t getIndirectYIndex(uint16_t adr, uint8_t Y) {
 void writeToMem(uint16_t adr, uint8_t val) {
 
 	switch (adr) {
-		case 0x2000:
+		case 0x2000:		//	PPUCTRL
 			writePPUCTRL(val);
 			break;
 		case 0x2006:		//	PPUADDR
@@ -91,7 +94,7 @@ void writeToMem(uint16_t adr, uint8_t val) {
 				open_ppuaddr = true;
 			}
 			else {
-				writePPUADDR(val, 0);
+				writePPUADDR(val, 1);
 				open_ppuaddr = false;
 			}
 			break;

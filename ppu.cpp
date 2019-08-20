@@ -46,6 +46,7 @@ void writePPUCTRL(uint8_t val) {
 
 //	PPUADDR write
 void writePPUADDR(uint16_t adr, uint8_t cycle_nr) {
+	printf("VRAM PPUADDR write at: 0x%04x\n", PPUADDR);
 	if (cycle_nr == 0) {
 		PPUADDR = adr << 8;
 	}
@@ -69,7 +70,12 @@ uint8_t readPPUSTATUS() {
 
 //	NMI
 bool NMIinterrupt() {
-	return NMI_occured && NMI_output;
+	if (NMI_occured && NMI_output) {
+		NMI_occured = false;
+		NMI_output = false;
+		return true;
+	}
+	return false;
 }
 
 void initPPU() {
@@ -99,7 +105,7 @@ void drawPatternTable() {
 			uint16_t adr = (r * 256 * 3) + (col * 3);
 
 			//printf("offset: 0x%04x - offset+8: 0x%04x\n", (r * 256) + col, (r * 256) + col + 8);
-			uint8_t pixel = (VRAM[(r * 256) + col] >> (col % 8)) & 1 + ((VRAM[(r * 256) + col + 8] >> (col % 8)) & 1) * 2;
+			uint8_t pixel = (VRAM[0x2000 + (r * 256) + col] >> (col % 8)) & 1 + ((VRAM[0x2000 + (r * 256) + col + 8] >> (col % 8)) & 1) * 2;
 
 			framebuffer[(r * 256 * 3) + (col * 3)] = COLORS[pixel];
 			framebuffer[(r * 256 * 3) + (col * 3) + 1] = COLORS[pixel];

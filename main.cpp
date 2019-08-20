@@ -21,7 +21,7 @@ using namespace::std;
 //	$4020 - $FFFF	$BFE0	Cartridge space : PRG ROM, PRG RAM, and mapper registers(See Note)
 
 unsigned char cartridge[0x10000];
-string filename = "nestest.nes";
+string filename = "dk.nes";
 
 int lastcyc = 0;
 int ppus = 0;
@@ -39,6 +39,8 @@ int main()
 	loadROM(cartridge);
 
 	initPPU();
+
+	resetCPU();
 
 	while (1) {
 		lastcyc = stepCPU();

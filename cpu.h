@@ -68,3 +68,4 @@ struct Status
 };
 
 int stepCPU();
+void resetCPU();
