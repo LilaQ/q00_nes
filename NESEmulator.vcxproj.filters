@@ -24,6 +24,9 @@
     <ClCompile Include="mmu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ppu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cpu.h">
@@ -33,6 +36,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="main.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ppu.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

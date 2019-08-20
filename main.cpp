@@ -2,6 +2,7 @@
 #include <string>
 #include "mmu.h"
 #include "cpu.h"
+#include "ppu.h"
 #include <iostream>
 #include <cstdint>
 using namespace::std;
@@ -23,6 +24,7 @@ unsigned char cartridge[0x10000];
 string filename = "nestest.nes";
 
 int lastcyc = 0;
+int ppus = 0;
 
 int main()
 {
@@ -36,8 +38,16 @@ int main()
 	fclose(file);
 	loadROM(cartridge);
 
+	initPPU();
+
 	while (1) {
 		lastcyc = stepCPU();
+		ppus += lastcyc * 3;
+		if (ppus > 10000) {
+			stepPPU();
+			ppus = 0;
+		}
+
 	}
 
 	return 1;
