@@ -4,8 +4,10 @@ void stepPPU();
 void writePPUADDR(uint16_t adr, uint8_t cycle_no);
 void writePPUDATA(uint8_t data);
 void writePPUCTRL(uint8_t val);
+void writeCHRRAM(unsigned char cartridge[], uint16_t offset);
 uint8_t readPPUSTATUS();
 bool NMIinterrupt();
+void drawCHRTable();
 
 struct PPUCTRL
 {

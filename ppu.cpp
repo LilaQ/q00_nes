@@ -78,17 +78,28 @@ bool NMIinterrupt() {
 	return false;
 }
 
+//	Load cartridge, map CHR-ROM to CHR-RAM (NROM)
+void writeCHRRAM(unsigned char cartridge[], uint16_t offset) {
+	for (int i = 0; i < 0x2000; i++) {
+		VRAM[i] = cartridge[offset + i];
+	}
+}
+
 void initPPU() {
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
 	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
-	SDL_CreateWindowAndRenderer(256, 128, 0, &window, &renderer);
-	SDL_SetWindowSize(window, 1024, 512);
-	SDL_RenderSetLogicalSize(renderer, 1024, 512);
+	SDL_CreateWindowAndRenderer(128, 256, 0, &window, &renderer);
+	SDL_SetWindowSize(window, 256, 512);
+	SDL_RenderSetLogicalSize(renderer, 256, 512);
 	SDL_SetWindowResizable(window, SDL_TRUE);
 
 	//	for fast rendering, create a texture
-	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 128);
+	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 128, 256);
+
+
+	//	DEBUG CALLS
+	drawCHRTable();
 }
 
 int COLORS[] {
@@ -98,24 +109,43 @@ int COLORS[] {
 	0xff
 };
 
-void drawPatternTable() {
+void drawCHRTable() {
 
-	for (int r = 0; r < 128; r++) {
-		for (int col = 0; col < 256; col++) {
-			uint16_t adr = (r * 256 * 3) + (col * 3);
+	SDL_Renderer* renderer_chr;
+	SDL_Window* window_chr;
+	SDL_Texture* texture_chr;
+	SDL_Event event_chr;
 
-			//printf("offset: 0x%04x - offset+8: 0x%04x\n", (r * 256) + col, (r * 256) + col + 8);
-			uint8_t pixel = (VRAM[0x2000 + (r * 256) + col] >> (col % 8)) & 1 + ((VRAM[0x2000 + (r * 256) + col + 8] >> (col % 8)) & 1) * 2;
+	//	init and create window and renderer
+	SDL_Init(SDL_INIT_VIDEO);
+	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+	SDL_CreateWindowAndRenderer(128, 256, 0, &window_chr, &renderer_chr);
+	SDL_SetWindowSize(window_chr, 256, 512);
+	SDL_RenderSetLogicalSize(renderer_chr, 256, 512);
+	SDL_SetWindowResizable(window_chr, SDL_TRUE);
 
-			framebuffer[(r * 256 * 3) + (col * 3)] = COLORS[pixel];
-			framebuffer[(r * 256 * 3) + (col * 3) + 1] = COLORS[pixel];
-			framebuffer[(r * 256 * 3) + (col * 3) + 2] = COLORS[pixel];
+	//	window decorations
+	char title[50];
+	snprintf(title, sizeof title, "[ CHR tables L/R ]", 0, 0, 0);
+	SDL_SetWindowTitle(window_chr, title);
+
+	//	for fast rendering, create a texture
+	texture_chr = SDL_CreateTexture(renderer_chr, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 128, 256);
+
+	for (int r = 0; r < 256; r++) {
+		for (int col = 0; col < 128; col++) {
+			uint16_t adr = (r / 8 * 0x100) + (r % 8) + (col / 8) * 0x10;
+
+			uint8_t pixel = (VRAM[adr] >> (7-(col % 8))) & 1 + ((VRAM[adr + 8] >> (7-(col % 8))) & 1) * 2;
+			framebuffer[(r * 128 * 3) + (col * 3)] = COLORS[pixel];
+			framebuffer[(r * 128 * 3) + (col * 3) + 1] = COLORS[pixel];
+			framebuffer[(r * 128 * 3) + (col * 3) + 2] = COLORS[pixel];
 		}
 	}
 
-	SDL_UpdateTexture(texture, NULL, framebuffer, 256 * sizeof(unsigned char) * 3);
-	SDL_RenderCopy(renderer, texture, NULL, NULL);
-	SDL_RenderPresent(renderer);
+	SDL_UpdateTexture(texture_chr, NULL, framebuffer, 128 * sizeof(unsigned char) * 3);
+	SDL_RenderCopy(renderer_chr, texture_chr, NULL, NULL);
+	SDL_RenderPresent(renderer_chr);
 
 }
 
@@ -138,7 +168,7 @@ void handleWindowEvents() {
 
 void stepPPU() {
 
-	drawPatternTable();
+	//drawCHRTable();
 	handleWindowEvents();
 
 	//	stepPPU

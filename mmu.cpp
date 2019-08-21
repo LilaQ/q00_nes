@@ -17,12 +17,16 @@ void reset() {
 //	copy cartridge to memory
 void loadROM(unsigned char c[]) {
 	for (int i = 0; i < 0x4000; i++) {
-		//	nestest
+		//	NROM
 		memory[0xc000 + i] = c[i+0x10];
 	}
 	for (int i = 0; i < 0x4000; i++) {
-		//	nestest
+		//	NROM
 		memory[0x8000 + i] = c[i + 0x4010];
+	}
+	for (int i = 0; i < 0x2000; i++) {
+		//	NROM
+		writeCHRRAM(c, 0x4010);
 	}
 }
 
