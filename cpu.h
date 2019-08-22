@@ -10,14 +10,14 @@ struct Registers
 
 struct Status
 {
-	uint8_t status = 0x24;	//	TODO usually 0x34 on power up 
-	uint8_t carry;
-	uint8_t zero;
-	uint8_t interruptDisable;
-	uint8_t decimal;
-	uint8_t overflow;
-	uint8_t negative;
-	uint8_t brk;
+	uint8_t status = 0x00;	//	TODO usually 0x34 on power up 
+	uint8_t carry = 0;
+	uint8_t zero = 0;
+	uint8_t interruptDisable = 1;
+	uint8_t decimal = 0;
+	uint8_t overflow = 0;
+	uint8_t negative = 0;
+	uint8_t brk = 0;
 
 	void setCarry(int v) {
 		carry = v;

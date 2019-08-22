@@ -181,36 +181,31 @@ uint8_t RRA(uint16_t adr, uint8_t cycles) {
 
 void resetCPU() {
 	PC = readFromMem(0xfffd) << 8 | readFromMem(0xfffc);
-	printf("Reset CPU\n");
+	//printf("Reset CPU\n");
 }
 
 
-int c = 7;
-int j = 0;
-int f = 0;
+int c = 0;
 int r = 0; //	don't delete, return val holder
+int debug = 0;
 int stepCPU() {
 	c += getLastCyc();
-	j += getLastCyc() * 3;
-	if (j > 340) {
-		j -= 341;
-		f++;
-	}
 
 	//	Check for NMI
-	/*if (NMIinterrupt) {
-		//printf("NMI occured!\n");
-		writeToMem(SP_ + 0x100, status.status | 0x30); 
-		SP_--;
+	if (NMIinterrupt()) {
+		printf("NMI occured!\n");
 		writeToMem(SP_ + 0x100, PC >> 8); 
 		SP_--;
 		writeToMem(SP_ + 0x100, PC & 0xff);
 		SP_--;
-		PC = readFromMem(0xfffa) << 8 | readFromMem(0xfffb);
-		
-	}*/
+		writeToMem(SP_ + 0x100, status.status | 0x30);
+		SP_--;
+		PC = readFromMem(0xfffb) << 8 | readFromMem(0xfffa);
+		debug++;
+	}
 
-	//printf("%04x %02x %02x %02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, j, f, c);
+	//if(debug >= 2)
+		//printf("%04x %02x %02x %02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, getPPUCycles(), getPPUScanlines(), c);
 	switch (readFromMem(PC)) {
 		case 0x00: { PC++; status.setBrk(1); return 7; break; }
 		case 0x01: { PC++; return ORA(getIndirectXIndex(PC++, registers.X), 6); break; }

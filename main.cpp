@@ -44,10 +44,9 @@ int main()
 
 	while (1) {
 		lastcyc = stepCPU();
-		ppus += lastcyc * 3;
-		if (ppus > 10000) {
+		ppus = lastcyc * 3;
+		while (ppus--) {
 			stepPPU();
-			ppus = 0;
 		}
 
 	}

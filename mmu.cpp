@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include "mmu.h"
 #include "ppu.h"
 
@@ -20,10 +21,10 @@ void loadROM(unsigned char c[]) {
 		//	NROM
 		memory[0xc000 + i] = c[i+0x10];
 	}
-	for (int i = 0; i < 0x4000; i++) {
+	/*for (int i = 0; i < 0x4000; i++) {
 		//	NROM
 		memory[0x8000 + i] = c[i + 0x4010];
-	}
+	}*/
 	for (int i = 0; i < 0x2000; i++) {
 		//	NROM
 		writeCHRRAM(c, 0x4010);
@@ -35,6 +36,9 @@ uint8_t readFromMem(uint16_t adr) {
 	{
 		case 0x2002:		//	PPUSTATUS
 			return readPPUSTATUS();
+			break;
+		case 0x4014:		//	OAM DMA
+			readOAMDATA();
 			break;
 		default:
 			return memory[adr];
@@ -92,6 +96,12 @@ void writeToMem(uint16_t adr, uint8_t val) {
 		case 0x2000:		//	PPUCTRL
 			writePPUCTRL(val);
 			break;
+		case 0x2003:		//	OAMADDR
+			writeOAMADDR(val);
+			break;
+		case 0x2004:		//	OAMDATA
+			writeOAMDATA(val);
+			break;
 		case 0x2006:		//	PPUADDR
 			if (!open_ppuaddr) {
 				writePPUADDR(val, 0);
@@ -104,6 +114,10 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			break;
 		case 0x2007:		//	PPUDATA
 			writePPUDATA(val);
+			break;
+		case 0x4014:		//	OAM DMA
+			oamDMAtransfer(val, memory);
+			printf("oam dma\n");
 			break;
 		default:
 			memory[adr] = val;
