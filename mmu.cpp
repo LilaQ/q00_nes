@@ -117,7 +117,6 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, memory);
-			printf("oam dma\n");
 			break;
 		default:
 			memory[adr] = val;

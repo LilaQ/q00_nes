@@ -193,7 +193,6 @@ int stepCPU() {
 
 	//	Check for NMI
 	if (NMIinterrupt()) {
-		printf("NMI occured!\n");
 		writeToMem(SP_ + 0x100, PC >> 8); 
 		SP_--;
 		writeToMem(SP_ + 0x100, PC & 0xff);

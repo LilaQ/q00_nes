@@ -123,6 +123,73 @@ uint8_t readOAMDATA() {
 	return OAM[OAMADDR];
 }
 
+uint32_t PALETTE[64] = {
+ 0x7C7C7C,
+ 0x0000FC,
+ 0x0000BC,
+ 0x4428BC,
+ 0x940084,
+ 0xA80020,
+ 0xA81000,
+ 0x881400,
+ 0x503000,
+ 0x007800,
+ 0x006800,
+ 0x005800,
+ 0x004058,
+ 0x000000,
+ 0x000000,
+ 0x000000,
+ 0xBCBCBC,
+ 0x0078F8,
+ 0x0058F8,
+ 0x6844FC,
+ 0xD800CC,
+ 0xE40058,
+ 0xF83800,
+ 0xE45C10,
+ 0xAC7C00,
+ 0x00B800,
+ 0x00A800,
+ 0x00A844,
+ 0x008888,
+ 0x000000,
+ 0x000000,
+ 0x000000,
+ 0xF8F8F8,
+ 0x3CBCFC,
+ 0x6888FC,
+ 0x9878F8,
+ 0xF878F8,
+ 0xF85898,
+ 0xF87858,
+ 0xFCA044,
+ 0xF8B800,
+ 0xB8F818,
+ 0x58D854,
+ 0x58F898,
+ 0x00E8D8,
+ 0x787878,
+ 0x000000,
+ 0x000000,
+ 0xFCFCFC,
+ 0xA4E4FC,
+ 0xB8B8F8,
+ 0xD8B8F8,
+ 0xF8B8F8,
+ 0xF8A4C0,
+ 0xF0D0B0,
+ 0xFCE0A8,
+ 0xF8D878,
+ 0xD8F878,
+ 0xB8F8B8,
+ 0xB8F8D8,
+ 0x00FCFC,
+ 0xF8D8F8,
+ 0x000000,
+ 0x000000
+};
+
 void initPPU() {
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
@@ -204,17 +271,33 @@ void drawNameTables() {
 
 	//	for fast rendering, create a texture
 	texture_nt = SDL_CreateTexture(renderer_nt, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 960);
-	for (int r = 0; r < 1024; r++) {
+	for (int r = 0; r < 960; r++) {
 		for (int col = 0; col < 256; col++) {
-			uint16_t tile_nr = VRAM[0x2000 + (r / 8 * 32) + (col / 8)];
-			uint16_t tile_attr = VRAM[0];
+			uint16_t tile_id = ((r / 8) * 32) + (col / 8);												//	sequential tile number
+			uint16_t tile_nr = VRAM[0x2000 + (r / 8 * 32) + (col / 8)];									//	tile ID at the current address
+			uint16_t adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + (r % 8);	//	adress of the tile in CHR RAM
 
-			uint16_t adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + (r % 8);
-			//printf("tile_nr %d\n", tile_nr);
+			//	select the correct byte of the attribute table
+			uint16_t tile_attr_nr = VRAM[((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32)];
+			//	select the part of the byte that we need (2-bits)
+			uint16_t tile_attr_subitem = (((tile_id % 64) % 2) + (r/16 % 2)*2) * 2;
+			
+			uint16_t palette_offset = ((tile_attr_nr >> tile_attr_subitem) & 0x3) * 4;
+			if (((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32) == 0x23ca && (tile_id == 0xa9 || tile_id == 0xa8) )
+				//printf("%d\n", tile_id);
+				//printf("%x\n", VRAM[0x23ca]);
+				//printf("%x\n", ((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32));
+			printf("tilenr: %x attnr: 0x%04x VRAM[attnr]: %d subitem: %d paloff: %02x\n", tile_id, tile_attr_nr, VRAM[tile_attr_nr], tile_attr_subitem, palette_offset);
+
 			uint8_t pixel = ((VRAM[adr] >> (7 - (col % 8))) & 1) + (((VRAM[adr + 8] >> (7 - (col % 8))) & 1) * 2);
-			framebuffer[(r * 256 * 3) + (col * 3)] = COLORS[pixel];
+			framebuffer[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] >> 16 ) & 0xff;
+			framebuffer[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] >> 8) & 0xff;
+			framebuffer[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] ) & 0xff;
+
+
+			/*framebuffer[(r * 256 * 3) + (col * 3)] = COLORS[pixel];
 			framebuffer[(r * 256 * 3) + (col * 3) + 1] = COLORS[pixel];
-			framebuffer[(r * 256 * 3) + (col * 3) + 2] = COLORS[pixel];
+			framebuffer[(r * 256 * 3) + (col * 3) + 2] = COLORS[pixel];*/
 		}
 	}
 

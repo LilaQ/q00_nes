@@ -59,3 +59,7 @@ Debug/NESEmulator.tlog/CL.write.1.tlog
 Debug/ppu.obj
 Debug/vc142.idb
 Debug/vc142.pdb
+Debug/ppu.obj
+Debug/ppu.obj
+Debug/NESEmulator.tlog/link.read.1.tlog
+*.nes
