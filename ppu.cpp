@@ -210,6 +210,9 @@ void initPPU() {
 	SDL_RenderSetLogicalSize(renderer_nt, 256, 960);
 	SDL_SetWindowResizable(window_nt, SDL_TRUE);
 
+	//	for fast rendering, create a texture
+	texture_nt = SDL_CreateTexture(renderer_nt, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 960);
+
 
 	//	DEBUG CALLS
 	drawCHRTable();
@@ -269,8 +272,6 @@ void drawNameTables() {
 	snprintf(title, sizeof title, "[ nametables ]", 0, 0);
 	SDL_SetWindowTitle(window_nt, title);
 
-	//	for fast rendering, create a texture
-	texture_nt = SDL_CreateTexture(renderer_nt, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 960);
 	for (int r = 0; r < 960; r++) {
 		for (int col = 0; col < 256; col++) {
 			uint16_t tile_id = ((r / 8) * 32) + (col / 8);												//	sequential tile number
@@ -280,14 +281,15 @@ void drawNameTables() {
 			//	select the correct byte of the attribute table
 			uint16_t tile_attr_nr = VRAM[((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32)];
 			//	select the part of the byte that we need (2-bits)
-			uint16_t tile_attr_subitem = (((tile_id % 64) % 2) + (r/16 % 2)*2) * 2;
+			uint16_t tile_attr_subitem = (((tile_id % 32) / 2 % 2) + (tile_id / 64 % 2) * 2) * 2;
+			//printf("%d => tile_atr_sub %d \n", tile_id, tile_attr_subitem);
 			
 			uint16_t palette_offset = ((tile_attr_nr >> tile_attr_subitem) & 0x3) * 4;
-			if (((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32) == 0x23ca && (tile_id == 0xa9 || tile_id == 0xa8) )
+			//if (((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32) == 0x23ca && (tile_id == 0xa9 || tile_id == 0xa8) )
 				//printf("%d\n", tile_id);
 				//printf("%x\n", VRAM[0x23ca]);
 				//printf("%x\n", ((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32));
-			printf("tilenr: %x attnr: 0x%04x VRAM[attnr]: %d subitem: %d paloff: %02x\n", tile_id, tile_attr_nr, VRAM[tile_attr_nr], tile_attr_subitem, palette_offset);
+			//printf("tilenr: %x attnr: 0x%04x VRAM[attnr]: %d subitem: %d paloff: %02x\n", tile_id, tile_attr_nr, VRAM[tile_attr_nr], tile_attr_subitem, palette_offset);
 
 			uint8_t pixel = ((VRAM[adr] >> (7 - (col % 8))) & 1) + (((VRAM[adr + 8] >> (7 - (col % 8))) & 1) * 2);
 			framebuffer[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] >> 16 ) & 0xff;

@@ -65,3 +65,6 @@ Debug/NESEmulator.tlog/link.read.1.tlog
 *.nes
 Debug/cpu.obj.enc
 Debug/mmu.obj.enc
+Debug/NESEmulator.tlog/NESEmulator.lastbuildstate
+Debug/NESEmulator.tlog/link.write.1.tlog
+Debug/NESEmulator.tlog/link.command.1.tlog
