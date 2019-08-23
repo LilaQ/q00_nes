@@ -63,3 +63,5 @@ Debug/ppu.obj
 Debug/ppu.obj
 Debug/NESEmulator.tlog/link.read.1.tlog
 *.nes
+Debug/cpu.obj.enc
+Debug/mmu.obj.enc
