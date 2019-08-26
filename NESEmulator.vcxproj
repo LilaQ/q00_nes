@@ -157,9 +157,11 @@
     <ClCompile Include="cpu.cpp" />
     <ClCompile Include="mmu.cpp" />
     <ClCompile Include="ppu.cpp" />
+    <ClCompile Include="wmu.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cpu.h" />
+    <ClInclude Include="wmu.h" />
     <ClInclude Include="ppu.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="mmu.h" />

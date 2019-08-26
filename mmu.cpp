@@ -21,10 +21,10 @@ void loadROM(unsigned char c[]) {
 		//	NROM
 		memory[0xc000 + i] = c[i+0x10];
 	}
-	/*for (int i = 0; i < 0x4000; i++) {
+	for (int i = 0; i < 0x4000; i++) {
 		//	NROM
 		memory[0x8000 + i] = c[i + 0x4010];
-	}*/
+	}
 	for (int i = 0; i < 0x2000; i++) {
 		//	NROM
 		writeCHRRAM(c, 0x4010);
@@ -38,7 +38,7 @@ uint8_t readFromMem(uint16_t adr) {
 			return readPPUSTATUS();
 			break;
 		case 0x4014:		//	OAM DMA
-			readOAMDATA();
+			return readOAMDATA();
 			break;
 		default:
 			return memory[adr];
@@ -113,9 +113,11 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			}
 			break;
 		case 0x2007:		//	PPUDATA
+			printf("PPUDATA\n");
 			writePPUDATA(val);
 			break;
 		case 0x4014:		//	OAM DMA
+			printf("OAM DMA\n");
 			oamDMAtransfer(val, memory);
 			break;
 		default:
