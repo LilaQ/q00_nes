@@ -11,7 +11,9 @@
 #include "commctrl.h"
 #include "ppu.h"
 #include "cpu.h"
+#include "mmu.h"
 #include "main.h"
+#include "commctrl.h"
 #undef main
 
 using namespace::std;
@@ -40,39 +42,39 @@ void initWindow(SDL_Window *win, string filename) {
 	HMENU hDebugger = CreateMenu();
 	HMENU hSavestates = CreateMenu();
 	HMENU hVol = CreateMenu();
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, L"[ main ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hConfig, L"[ config ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hVol, L"[ vol ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hSavestates, L"[ savestates ]");
-	AppendMenu(hMenuBar, MF_STRING, 11, L"[ ||> un/pause ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, L"[ debug ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, L"[ help ]");
-	AppendMenu(hFile, MF_STRING, 9, L"» load rom");
-	AppendMenu(hFile, MF_STRING, 7, L"» reset");
-	AppendMenu(hFile, MF_STRING, 1, L"» exit");
-	AppendMenu(hHelp, MF_STRING, 3, L"» about");
-	AppendMenu(hDebugger, MF_STRING, 4, L"» CHR table");
-	AppendMenu(hDebugger, MF_STRING, 5, L"» Nametables");
-	AppendMenu(hDebugger, MF_STRING, 10, L"» OAM tables");
-	AppendMenu(hSavestates, MF_STRING, 12, L"» save state");
-	AppendMenu(hSavestates, MF_STRING, 13, L"» load state");
-	AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hSound, L"[ sound ]");
-	AppendMenu(hSound, MF_STRING, 14, L"» disable/enable");
-	AppendMenu(hSound, MF_STRING, 15, L"» disable/enable SC1");
-	AppendMenu(hSound, MF_STRING, 16, L"» disable/enable SC2");
-	AppendMenu(hSound, MF_STRING, 17, L"» disable/enable SC3");
-	AppendMenu(hSound, MF_STRING, 18, L"» disable/enable SC4");
-	AppendMenu(hSound, MF_STRING, 23, L"» toggle 8-bit remix mode");
-	AppendMenu(hVol, MF_STRING, 24, L"» 10%");
-	AppendMenu(hVol, MF_STRING, 25, L"» 20%");
-	AppendMenu(hVol, MF_STRING, 26, L"» 30%");
-	AppendMenu(hVol, MF_STRING, 27, L"» 40%");
-	AppendMenu(hVol, MF_STRING, 28, L"» 50%");
-	AppendMenu(hVol, MF_STRING, 29, L"» 60%");
-	AppendMenu(hVol, MF_STRING, 30, L"» 70%");
-	AppendMenu(hVol, MF_STRING, 31, L"» 80%");
-	AppendMenu(hVol, MF_STRING, 32, L"» 90%");
-	AppendMenu(hVol, MF_STRING, 33, L"» 100%");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, "[ main ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hConfig, "[ config ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hVol, "[ vol ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hSavestates, "[ savestates ]");
+	AppendMenu(hMenuBar, MF_STRING, 11, "[ ||> un/pause ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debug ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "[ help ]");
+	AppendMenu(hFile, MF_STRING, 9, "» load rom");
+	AppendMenu(hFile, MF_STRING, 7, "» reset");
+	AppendMenu(hFile, MF_STRING, 1, "» exit");
+	AppendMenu(hHelp, MF_STRING, 3, "» about");
+	AppendMenu(hDebugger, MF_STRING, 4, "» CHR table");
+	AppendMenu(hDebugger, MF_STRING, 5, "» Nametables");
+	AppendMenu(hDebugger, MF_STRING, 10, "» OAM tables");
+	AppendMenu(hSavestates, MF_STRING, 12, "» save state");
+	AppendMenu(hSavestates, MF_STRING, 13, "» load state");
+	AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hSound, "[ sound ]");
+	AppendMenu(hSound, MF_STRING, 14, "» disable/enable");
+	AppendMenu(hSound, MF_STRING, 15, "» disable/enable SC1");
+	AppendMenu(hSound, MF_STRING, 16, "» disable/enable SC2");
+	AppendMenu(hSound, MF_STRING, 17, "» disable/enable SC3");
+	AppendMenu(hSound, MF_STRING, 18, "» disable/enable SC4");
+	AppendMenu(hSound, MF_STRING, 23, "» toggle 8-bit remix mode");
+	AppendMenu(hVol, MF_STRING, 24, "» 10%");
+	AppendMenu(hVol, MF_STRING, 25, "» 20%");
+	AppendMenu(hVol, MF_STRING, 26, "» 30%");
+	AppendMenu(hVol, MF_STRING, 27, "» 40%");
+	AppendMenu(hVol, MF_STRING, 28, "» 50%");
+	AppendMenu(hVol, MF_STRING, 29, "» 60%");
+	AppendMenu(hVol, MF_STRING, 30, "» 70%");
+	AppendMenu(hVol, MF_STRING, 31, "» 80%");
+	AppendMenu(hVol, MF_STRING, 32, "» 90%");
+	AppendMenu(hVol, MF_STRING, 33, "» 100%");
 	SetMenu(hwnd, hMenuBar);
 
 	//	Enable WM events for SDL Window
@@ -104,15 +106,10 @@ void handleWindowEvents(SDL_Event event) {
 				}
 				//	Sprite Map
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 6) {
-					/*SDL_Window* tWindow;
-					SDL_Renderer* tRenderer;
-					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
-					SDL_SetWindowSize(tWindow, 512, 512);
-					drawSpriteMap(tRenderer, tWindow);*/
 				}
 				//	Reset
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 7) {
-					//resetGameboy();
+					resetCPU();
 				}
 				//	Memory Map
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 8) {
@@ -120,7 +117,6 @@ void handleWindowEvents(SDL_Event event) {
 				}
 				//	Load ROM
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 9) {
-					/*printf("loading ROM");
 					char f[100];
 					OPENFILENAME ofn;
 
@@ -128,17 +124,15 @@ void handleWindowEvents(SDL_Event event) {
 					ZeroMemory(&ofn, sizeof(ofn));
 					ofn.lStructSize = sizeof(ofn);
 					ofn.hwndOwner = NULL;  // If you have a window to center over, put its HANDLE here
-					ofn.lpstrFilter = "GameBoy Roms\0*.gb\0";
+					ofn.lpstrFilter = "NES Roms\0*.nes\0";
 					ofn.lpstrFile = f;
 					ofn.nMaxFile = MAX_PATH;
 					ofn.lpstrTitle = "[ rom selection ]";
 					ofn.Flags = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
 
 					if (GetOpenFileNameA(&ofn)) {
-						filename = f;
-						resetGameboy();
+						loadROM(f);
 					}
-					*/
 				}
 				//	OAM
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 10) {

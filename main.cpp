@@ -1,4 +1,3 @@
-#define _CRT_SECURE_NO_DEPRECATE
 #include <string>
 #include "mmu.h"
 #include "cpu.h"
@@ -25,7 +24,6 @@ using namespace::std;
 //	$4020 - $FFFF	$BFE0	Cartridge space : PRG ROM, PRG RAM, and mapper registers(See Note)
 
 SDL_Event event;					//	Eventhandler for all SDL events
-unsigned char cartridge[0x10000];
 string filename = "smb.nes";
 bool unpaused = true;
 
@@ -36,13 +34,7 @@ int main()
 {
 
 	//	load cartridge
-	FILE* file = fopen(filename.c_str(), "rb");
-	int pos = 0;
-	while (fread(&cartridge[pos], 1, 1, file)) {
-		pos++;
-	}
-	fclose(file);
-	loadROM(cartridge);
+	loadROM(filename);
 
 	initPPU(filename);
 
@@ -70,4 +62,12 @@ int getLastCyc() {
 
 void togglePause() {
 	unpaused ^= 1;
+}
+
+void setPause() {
+	unpaused = 0;
+}
+
+void resetPause() {
+	unpaused = 1;
 }

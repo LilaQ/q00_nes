@@ -17,21 +17,24 @@ using namespace::std;
 //	init PPU
 unsigned char VRAM[0x4000];		//	16 kbytes
 unsigned char OAM[0x100];		//	256 bytes
-const int FB_SIZE = 256 * 224 * 3;
+const int FB_SIZE = 256 * 240 * 3;
 SDL_Renderer *renderer, *renderer_nt, *renderer_oam;
 SDL_Window *window, *window_nt, *window_oam;
 SDL_Texture *texture, *texture_nt, *texture_oam;
 unsigned char framebuffer[FB_SIZE];		//	3 bytes per pixel, RGB24
 unsigned char framebuffer_bg[FB_SIZE];	//	3 bytes per pixel, RGB24
 unsigned char framebuffer_chr[256 * 128 * 3];	//	3 bytes per pixel, RGB24 - CHR / Pattern Table
-unsigned char framebuffer_nt[256 * 1024 * 3];	//	3 bytes per pixel, RGB24 - Nametables
+unsigned char framebuffer_nt[256 * 960 * 3];	//	3 bytes per pixel, RGB24 - Nametables
 unsigned char framebuffer_oam[256 * 224 * 3];	//	3 bytes per pixel, RGB24 - OAM / Sprites
 uint16_t ppuScanline = 0;
 uint16_t ppuCycles = 30;
+uint8_t PPUDATA_buffer = 0x00;
+uint8_t PPUSCROLL_x, PPUSCROLL_y, PPUSCROLL_pos = 0;
 
 //	Registers
 PPUCTRL PPU_CTRL;
 PPUSTATUS PPU_STATUS;
+PPUMASK PPU_MASK;
 uint16_t PPUADDR = 0x0;
 uint8_t OAMADDR = 0x0;
 bool NMI_occured = false;
@@ -63,13 +66,27 @@ void writePPUADDR(uint16_t adr, uint8_t cycle_nr) {
 		PPUADDR |= adr;
 	}
 
-	PPU_STATUS.appendLSB(adr);
+	PPU_STATUS.appendLSB(adr & 0xff);
 }
 
 //	PPUDATA write
 void writePPUDATA(uint8_t data) {
-	if(PPUADDR == 0x220b)
-		printf("VRAM PPUDATA write at: 0x%04x with val: 0x%02x\n", PPUADDR, data);
+	if (PPUADDR == 0x3f10)
+		VRAM[0x3f00] = data;
+	if (PPUADDR == 0x3f14)
+		VRAM[0x3f04] = data;
+	if (PPUADDR == 0x3f18)
+		VRAM[0x3f08] = data;
+	if (PPUADDR == 0x3f1c)
+		VRAM[0x3f0c] = data;
+	if (PPUADDR == 0x3f00)
+		VRAM[0x3f10] = data;
+	if (PPUADDR == 0x3f04)
+		VRAM[0x3f14] = data;
+	if (PPUADDR == 0x3f08)
+		VRAM[0x3f18] = data;
+	if (PPUADDR == 0x3f0c)
+		VRAM[0x3f1c] = data;
 	VRAM[PPUADDR] = data;
 	PPUADDR += PPU_CTRL.ppudata_increment_value;
 	//	TODO : VRAM mirroring
@@ -77,12 +94,20 @@ void writePPUDATA(uint8_t data) {
 	PPU_STATUS.appendLSB(data);
 }
 
+//	PPUDATA read
+uint8_t readPPUDATA() {
+	uint8_t ret = PPUDATA_buffer;
+	PPUDATA_buffer = VRAM[PPUADDR];
+	PPUADDR += PPU_CTRL.ppudata_increment_value;
+	return ret;
+}
+
 //	PPUSTATUS read
 uint8_t readPPUSTATUS() {
-	//printf("VRAM PPUSTATUS read\n");
 	uint8_t ret = PPU_STATUS.value;
 	PPU_STATUS.clearVBlank();
 	NMI_occured = false;
+	PPUADDR += PPU_CTRL.ppudata_increment_value;
 	return ret;
 }
 
@@ -124,9 +149,38 @@ void writeOAMDATA(uint8_t val) {
 	PPU_STATUS.appendLSB(val);
 }
 
+//	Read OAM Data
 uint8_t readOAMDATA() {
 	//	TODO, only in VBlank / FBlank?
 	return OAM[OAMADDR];
+}
+
+//	Write PPUSCROLL
+void writePPUSCROLL(uint8_t val) {
+	if (PPUSCROLL_pos == 0) {
+		PPUSCROLL_pos = 1;
+		PPUSCROLL_x = val;
+	}
+	else {
+		PPUSCROLL_pos = 0;
+		PPUSCROLL_y = val;
+	}
+}
+
+//	Write PPUMASK
+void writePPUMASK(uint8_t val) {
+	PPU_MASK.setValue(val);
+}
+
+/*
+	FIX PALETTE ADDRESSES
+	0x3f04, 0x3f08 and 0x3f0c fall back to default color at 0x3f00
+*/
+uint16_t fixPalette(uint16_t c) {
+	if ((c & 3) == 0) {
+		return c & 0xffe0;
+	}
+	return c;
 }
 
 //	NES color palette
@@ -146,24 +200,13 @@ void initPPU(string filename) {
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
 	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
-	SDL_CreateWindowAndRenderer(256, 224, 0, &window, &renderer);
-	SDL_SetWindowSize(window, 512, 448);
-	SDL_RenderSetLogicalSize(renderer, 512, 448);
+	SDL_CreateWindowAndRenderer(256, 240, 0, &window, &renderer);
+	SDL_SetWindowSize(window, 512, 480);
+	//SDL_RenderSetLogicalSize(renderer, 512, 480);
 	SDL_SetWindowResizable(window, SDL_TRUE);
 
 	//	for fast rendering, create a texture
-	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 224);
-
-	SDL_version compiled;
-	SDL_version linked;
-
-	SDL_VERSION(&compiled);
-	SDL_GetVersion(&linked);
-	printf("We compiled against SDL version %d.%d.%d ...\n",
-		compiled.major, compiled.minor, compiled.patch);
-	printf("But we are linking against SDL version %d.%d.%d.\n",
-		linked.major, linked.minor, linked.patch);
-
+	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 240);
 
 	/*
 		INIT WINDOW
@@ -183,74 +226,14 @@ int COLORS[] {
 /*
 	DRAW FRAME
 */
-
 void drawFrame() {
-
-	for (int r = 0; r < 960; r++) {
-		for (int col = 0; col < 256; col++) {
-			uint16_t tile_id = ((r / 8) * 32) + (col / 8);												//	sequential tile number
-			uint16_t tile_nr = VRAM[0x2000 + (r / 8 * 32) + (col / 8)];									//	tile ID at the current address
-			uint16_t adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + (r % 8);	//	adress of the tile in CHR RAM
-
-			//	select the correct byte of the attribute table
-			uint16_t tile_attr_nr = VRAM[((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32)];
-			//	select the part of the byte that we need (2-bits)
-			uint16_t attr_shift = (((tile_id % 32) / 2 % 2) + (tile_id / 64 % 2) * 2) * 2;
-			uint16_t palette_offset = ((tile_attr_nr >> attr_shift) & 0x3) * 4;
-			uint8_t pixel = ((VRAM[adr] >> (7 - (col % 8))) & 1) + (((VRAM[adr + 8] >> (7 - (col % 8))) & 1) * 2);
-			framebuffer[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] >> 16) & 0xff;
-			framebuffer[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] >> 8) & 0xff;
-			framebuffer[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]]) & 0xff;
-
-		}
-	}
-
-	for (int i = 63; i >= 0; i--) {
-		uint8_t Y_Pos = OAM[i * 4];		//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
-		uint8_t Tile_Index_Nr = OAM[i * 4 + 1];
-		uint8_t Attributes = OAM[i * 4 + 2];
-		uint8_t X_Pos = OAM[i * 4 + 3];
-		uint16_t Palette_Offset = 0x3f10 + ((Attributes & 3) * 4);
-
-		//	iterate through 8x8 sprite in Pattern Table, with offset of Y_Pos and X_Pos
-		for (int j = 0; j < 8; j++) {
-			for (int t = 0; t < 8; t++) {
-				uint8_t V = 0x00;
-				switch ((Attributes >> 6) & 3) {
-					case 0x00:	//	no flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
-						break;
-					case 0x01:	//	horizontal flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
-						break;
-					case 0x02:	//	vertical flip
-						break;
-					case 0x03:	//	horizontal & vertical flip
-						break;
-				}
-				uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
-				uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
-				uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
-
-				if (V) {
-					//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
-					framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3)] = R;
-					framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
-					framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
-
-					//	sprite zero hit
-					if (!PPU_STATUS.isSpriteZero() && i == 0)
-						PPU_STATUS.setSpriteZero();
-				}
-			}
-		}
-	}
 
 	SDL_UpdateTexture(texture, NULL, framebuffer, 256 * sizeof(unsigned char) * 3);
 	SDL_RenderCopy(renderer, texture, NULL, NULL);
 	SDL_RenderPresent(renderer);
 
 }
+
 
 void drawCHRTable() {
 
@@ -267,7 +250,7 @@ void drawCHRTable() {
 
 	//	window decorations
 	char title[50];
-	snprintf(title, sizeof title, "[ CHR tables L/R ]", 0);
+	snprintf(title, sizeof title, "[ CHR tables L/R ]");
 	SDL_SetWindowTitle(window_chr, title);
 
 	//	for fast rendering, create a texture
@@ -303,7 +286,7 @@ void drawOAM() {
 
 	//	window decorations
 	char title[50];
-	snprintf(title, sizeof title, "[ OAM / Sprites ]", 0);
+	snprintf(title, sizeof title, "[ OAM / Sprites ]");
 	SDL_SetWindowTitle(window_oam, title);
 
 	//	for fast rendering, create a texture
@@ -364,18 +347,22 @@ void drawNameTables() {
 	for (int r = 0; r < 960; r++) {
 		for (int col = 0; col < 256; col++) {
 			uint16_t tile_id = ((r / 8) * 32) + (col / 8);												//	sequential tile number
-			uint16_t tile_nr = VRAM[0x2000 + (r / 8 * 32) + (col / 8)];									//	tile ID at the current address
+			uint16_t natural_address = 0x2000 + tile_id;
+			natural_address += 0x40 * ((natural_address % 0x2000) / 0x3c0);
+			uint16_t tile_nr = VRAM[natural_address];													//	tile ID at the current address (skip attribute tables)
 			uint16_t adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + (r % 8);	//	adress of the tile in CHR RAM
 
 			//	select the correct byte of the attribute table
-			uint16_t tile_attr_nr = VRAM[((0x2000 + (r / 8 * 32) + (col / 8)) & 0xfc00) + 0x03c0 + ((r / 32) * 8) + (col / 32)];
+			uint16_t tile_attr_nr = VRAM[(natural_address & 0xfc00) + 0x03c0 + (((((r + (r / 240) * 16) / 32) * 8) + (col / 32)) % 0x40)];
+
 			//	select the part of the byte that we need (2-bits)
-			uint16_t attr_shift = (((tile_id % 32) / 2 % 2) + (tile_id / 64 % 2) * 2) * 2;
+			uint16_t attr_shift = (((tile_id % 32) / 2 % 2) + ( (tile_id + (r/240) * 64) / 64 % 2) * 2) * 2;
 			uint16_t palette_offset = ((tile_attr_nr >> attr_shift) & 0x3) * 4;
 			uint8_t pixel = ((VRAM[adr] >> (7 - (col % 8))) & 1) + (((VRAM[adr + 8] >> (7 - (col % 8))) & 1) * 2);
-			framebuffer_nt[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] >> 16 ) & 0xff;
-			framebuffer_nt[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] >> 8) & 0xff;
-			framebuffer_nt[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[VRAM[0x3f00 + palette_offset + pixel]] ) & 0xff;
+
+			framebuffer_nt[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[fixPalette(0x3f00 + palette_offset + pixel)]] >> 16 ) & 0xff;
+			framebuffer_nt[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[VRAM[fixPalette(0x3f00 + palette_offset + pixel)]] >> 8) & 0xff;
+			framebuffer_nt[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[VRAM[fixPalette(0x3f00 + palette_offset + pixel)]] ) & 0xff;
 
 		}
 	}
@@ -384,6 +371,106 @@ void drawNameTables() {
 	SDL_RenderCopy(renderer_nt, texture_nt, NULL, NULL);
 	SDL_RenderPresent(renderer_nt);
 
+}
+
+
+uint16_t getAttribute(uint16_t adr) {
+	uint16_t base = (adr & 0xfc00) + 0x03c0;
+	uint16_t diff = adr - (adr & 0xfc00);
+	uint16_t cell = (diff / 128) * 8 + ((diff % 128) % 32 / 4);
+	//printf("adr 0x%04x gets attribute address 0x%04x (base: 0x%04x diff: 0x%04x)\n", adr, base + cell, base, diff);
+	return VRAM[base + cell];
+}
+
+uint8_t getAttributeTilePart(uint16_t adr) {
+	uint16_t diff = adr - (adr & 0xfc00);
+	uint8_t tilePar = (diff / 2) % 2 + ((diff / 64) % 2) * 2;
+	return tilePar * 2;
+}
+
+/*
+	CALC SCANLINE ARRAY FOR ROW X
+*/
+uint16_t tile_id, tile_nr, adr, tile_attr_nr, attr_shift, palette_offset, Palette_Offset;
+uint8_t pixel, Y_Pos, Tile_Index_Nr, Attributes, X_Pos;
+void renderScanline(uint16_t row) {
+	int r = row;
+	if (PPU_MASK.show_bg) {
+		for (int col = 0; col < 256; col++) {
+			tile_id = ((r / 8) * 32) + ((col + PPUSCROLL_x % 8) / 8);					//	sequential tile number
+			uint16_t natural_address = PPU_CTRL.base_nametable_address_value + tile_id;
+			uint16_t scrolled_address = natural_address + PPUSCROLL_x / 8;
+			if ((natural_address & 0xffe0) != (scrolled_address & 0xffe0))				//	check if X-boundary crossed 
+			{
+				scrolled_address ^= 0x400;	//	XOR the bit, that changes NTs horizontally
+				scrolled_address -= 0x20;	//	remove the 'line break'
+			}
+			tile_nr = VRAM[scrolled_address];								//	tile ID at the current address
+			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + (r % 8);	//	adress of the tile in CHR RAM
+
+			//	select the correct byte of the attribute table
+			tile_attr_nr = getAttribute(scrolled_address);
+
+			//	select the part of the byte that we need (2-bits)
+			attr_shift = getAttributeTilePart(scrolled_address);
+			palette_offset = ((tile_attr_nr >> attr_shift) & 0x3) * 4;
+
+
+			pixel = ((VRAM[adr] >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) + (((VRAM[adr + 8] >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) * 2);
+
+			framebuffer[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f)]] >> 16) & 0xff;
+			framebuffer[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[VRAM[fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f)]] >> 8) & 0xff;
+			framebuffer[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[VRAM[fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f)]]) & 0xff;
+
+		}
+	}
+
+	if (PPU_MASK.show_sprites) {
+		for (int i = 0; i < 64; i++) {
+			Y_Pos = OAM[i * 4];
+			Tile_Index_Nr = OAM[i * 4 + 1];
+			Attributes = OAM[i * 4 + 2];
+			X_Pos = OAM[i * 4 + 3];
+			Palette_Offset = 0x3f10 + ((Attributes & 3) * 4);
+
+			if (row >= Y_Pos && (Y_Pos + 8) >= row) {
+				//	iterate through 8x8 sprite in Pattern Table, with offset of Y_Pos and X_Pos
+				for (int j = 0; j < 8; j++) {
+					for (int t = 0; t < 8; t++) {
+						uint8_t V = 0x00;
+						switch ((Attributes >> 6) & 3) {
+						case 0x00:	//	no flip
+							V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+							break;
+						case 0x01:	//	horizontal flip
+							V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
+							break;
+						case 0x02:	//	vertical flip
+							break;
+						case 0x03:	//	horizontal & vertical flip
+							break;
+						}
+						uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
+						uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
+						uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
+
+						if (V) {
+							if (!((Attributes >> 5) & 1)) {
+								//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
+								framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3)] = R;
+								framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
+								framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
+							}
+
+							//	sprite zero hit
+							if (!PPU_STATUS.isSpriteZero() && i == 0)
+								PPU_STATUS.setSpriteZero();
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 void stepPPU() {
@@ -396,7 +483,8 @@ void stepPPU() {
 	}
 	//printf("PPU Cycles: %d Scanlines: %d\n", ppuCycles, ppuScanline);
 	if (0 <= ppuScanline && ppuScanline <= 239) {	//	drawing
-		//printf("Drawing NTs!\n");
+		if(ppuCycles == 0)
+			renderScanline(ppuScanline);
 	}
 	else if (ppuScanline == 241 && ppuCycles == 1) {	//	VBlank 
 		//printf("VBlanking!\n");
@@ -419,5 +507,4 @@ void stepPPU() {
 		}
 
 	}
-
 }

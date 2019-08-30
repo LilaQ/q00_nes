@@ -5,9 +5,12 @@ void initPPU(string filename);
 void stepPPU();
 void writePPUADDR(uint16_t adr, uint8_t cycle_no);
 void writePPUDATA(uint8_t data);
+uint8_t readPPUDATA();
 void writePPUCTRL(uint8_t val);
 void writeCHRRAM(unsigned char cartridge[], uint16_t offset);
 uint8_t readPPUSTATUS();
+void writePPUSCROLL(uint8_t val);
+void writePPUMASK(uint8_t val);
 bool NMIinterrupt();
 void drawCHRTable();
 void drawOAM();
@@ -23,6 +26,7 @@ struct PPUCTRL
 {
 	uint8_t value = 0;
 	uint8_t base_nametable_address = 0;			//	bit 0 & bit 1
+	uint16_t base_nametable_address_value = 0;
 	uint8_t ppudata_increment = 0;				//	bit 2
 	uint8_t ppudata_increment_value = 0;		
 	uint8_t sprite_pattern_table_adr = 0;		//	bit 3
@@ -47,6 +51,7 @@ struct PPUCTRL
 		ppudata_increment_value = (ppudata_increment == 0) ? 1 : 32;
 		background_pattern_table_adr_value = (background_pattern_table_adr == 0) ? 0x0000 : 0x1000;
 		sprite_pattern_table_adr_value = (sprite_pattern_table_adr == 0) ? 0x0000 : 0x1000;
+		base_nametable_address_value = 0x2000 + (base_nametable_address * 0x400);
 	}
 };
 
@@ -90,4 +95,25 @@ struct PPUSTATUS
 	void appendLSB(uint8_t val) {
 		value |= (val & 0x1f);
 	}
+};
+
+struct PPUMASK {
+
+	uint8_t value = 0;
+
+	uint8_t greyscale = 0;
+	uint8_t show_bg_left_8px = 0;
+	uint8_t show_sprites_left_8px = 0;
+	uint8_t show_bg = 0;
+	uint8_t show_sprites = 0;
+
+	void setValue(uint8_t val) {
+		value = val;
+		greyscale = value & 1;
+		show_bg_left_8px = (value >> 1) & 1;
+		show_sprites_left_8px = (value >> 2) & 1;
+		show_bg = (value >> 3) & 1;
+		show_sprites = (value >> 4) & 1;
+	}
+
 };
