@@ -25,7 +25,7 @@ unsigned char framebuffer[FB_SIZE];		//	3 bytes per pixel, RGB24
 unsigned char framebuffer_bg[FB_SIZE];	//	3 bytes per pixel, RGB24
 unsigned char framebuffer_chr[256 * 128 * 3];	//	3 bytes per pixel, RGB24 - CHR / Pattern Table
 unsigned char framebuffer_nt[256 * 960 * 3];	//	3 bytes per pixel, RGB24 - Nametables
-unsigned char framebuffer_oam[256 * 224 * 3];	//	3 bytes per pixel, RGB24 - OAM / Sprites
+unsigned char framebuffer_oam[256 * 240 * 3];	//	3 bytes per pixel, RGB24 - OAM / Sprites
 uint16_t ppuScanline = 0;
 uint16_t ppuCycles = 30;
 uint8_t PPUDATA_buffer = 0x00;
@@ -279,9 +279,9 @@ void drawCHRTable() {
 */
 void drawOAM() {
 
-	SDL_CreateWindowAndRenderer(256, 224, 0, &window_oam, &renderer_oam);
-	SDL_SetWindowSize(window_oam, 256, 224);
-	SDL_RenderSetLogicalSize(renderer_oam, 256, 224);
+	SDL_CreateWindowAndRenderer(256, 240, 0, &window_oam, &renderer_oam);
+	SDL_SetWindowSize(window_oam, 256, 240);
+	SDL_RenderSetLogicalSize(renderer_oam, 256, 240);
 	SDL_SetWindowResizable(window_oam, SDL_TRUE);
 
 	//	window decorations
@@ -290,10 +290,10 @@ void drawOAM() {
 	SDL_SetWindowTitle(window_oam, title);
 
 	//	for fast rendering, create a texture
-	texture_oam = SDL_CreateTexture(renderer_oam, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 224);
+	texture_oam = SDL_CreateTexture(renderer_oam, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 240);
 
 	//	clear array
-	memset(framebuffer_oam, 0x00, sizeof(framebuffer_oam));
+	memset(framebuffer_oam, 0xcc, sizeof(framebuffer_oam));
 
 	for (int i = 0; i < 64; i++) {
 		uint8_t Y_Pos = OAM[i * 4];
@@ -305,15 +305,31 @@ void drawOAM() {
 		//	iterate through 8x8 sprite in Pattern Table, with offset of Y_Pos and X_Pos
 		for (int j = 0; j < 8; j++) {
 			for (int t = 0; t < 8; t++) {
-				uint8_t V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+				uint8_t V = 0x00;
+				switch ((Attributes >> 6) & 3) {
+					case 0x00:	//	no flip
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+						break;
+					case 0x01:	//	horizontal flip
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
+						break;
+					case 0x02:	//	vertical flip
+						break;
+					case 0x03:	//	horizontal & vertical flip
+						break;
+				}
 				uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
 				uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
 				uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
 
 				if (V) {
-					framebuffer_oam[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3)] = R;
-					framebuffer_oam[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
-					framebuffer_oam[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
+					//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
+					framebuffer_oam[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3)] = R;
+					framebuffer_oam[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
+					framebuffer_oam[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
+
+					if(i==0)
+						printf("%d\n", Y_Pos + 1 + j);
 				}
 			}
 		}
@@ -394,13 +410,14 @@ uint8_t getAttributeTilePart(uint16_t adr) {
 uint16_t tile_id, tile_nr, adr, tile_attr_nr, attr_shift, palette_offset, Palette_Offset;
 uint8_t pixel, Y_Pos, Tile_Index_Nr, Attributes, X_Pos;
 void renderScanline(uint16_t row) {
-	int r = row;
+
+	int r = row ;
 	if (PPU_MASK.show_bg) {
 		for (int col = 0; col < 256; col++) {
 			tile_id = ((r / 8) * 32) + ((col + PPUSCROLL_x % 8) / 8);					//	sequential tile number
 			uint16_t natural_address = PPU_CTRL.base_nametable_address_value + tile_id;
 			uint16_t scrolled_address = natural_address + PPUSCROLL_x / 8;
-			if ((natural_address & 0xffe0) != (scrolled_address & 0xffe0))				//	check if X-boundary crossed 
+			if (((natural_address & 0xffe0) != (scrolled_address & 0xffe0)) || ((col > 128) && ((tile_id % 32) == 0)))		//	check if X-boundary crossed ( AND account for transfer-tile glitch)
 			{
 				scrolled_address ^= 0x400;	//	XOR the bit, that changes NTs horizontally
 				scrolled_address -= 0x20;	//	remove the 'line break'
@@ -425,46 +442,47 @@ void renderScanline(uint16_t row) {
 		}
 	}
 
+	
+
 	if (PPU_MASK.show_sprites) {
-		for (int i = 0; i < 64; i++) {
-			Y_Pos = OAM[i * 4];
+		for (int i = 63; i >= 0; i--) {
+			Y_Pos = OAM[i * 4] + 1;
 			Tile_Index_Nr = OAM[i * 4 + 1];
 			Attributes = OAM[i * 4 + 2];
 			X_Pos = OAM[i * 4 + 3];
 			Palette_Offset = 0x3f10 + ((Attributes & 3) * 4);
-
-			if (row >= Y_Pos && (Y_Pos + 8) >= row) {
+			if (r >= Y_Pos && (Y_Pos + 8) > r && Y_Pos) {
 				//	iterate through 8x8 sprite in Pattern Table, with offset of Y_Pos and X_Pos
-				for (int j = 0; j < 8; j++) {
-					for (int t = 0; t < 8; t++) {
-						uint8_t V = 0x00;
-						switch ((Attributes >> 6) & 3) {
-						case 0x00:	//	no flip
-							V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
-							break;
-						case 0x01:	//	horizontal flip
-							V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
-							break;
-						case 0x02:	//	vertical flip
-							break;
-						case 0x03:	//	horizontal & vertical flip
-							break;
-						}
-						uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
-						uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
-						uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
+				int j = r - Y_Pos;
+				for (int t = 0; t < 8; t++) {
+					uint8_t V = 0x00;
+					switch ((Attributes >> 6) & 3) {
+					case 0x00:	//	no flip
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+						break;
+					case 0x01:	//	horizontal flip
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
+						break;
+					case 0x02:	//	vertical flip
+						break;
+					case 0x03:	//	horizontal & vertical flip
+						break;
+					}
+					uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
+					uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
+					uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
 
-						if (V) {
-							if (!((Attributes >> 5) & 1)) {
-								//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
-								framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3)] = R;
-								framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
-								framebuffer[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
-							}
+					if (V) {
+						//if (!((Attributes >> 5) & 1)) {
+							//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
+							framebuffer[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3)] = R;
+							framebuffer[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
+							framebuffer[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
+						//}
 
-							//	sprite zero hit
-							if (!PPU_STATUS.isSpriteZero() && i == 0)
-								PPU_STATUS.setSpriteZero();
+						//	sprite zero hit
+						if (!PPU_STATUS.isSpriteZero() && i == 0) {
+							PPU_STATUS.setSpriteZero();
 						}
 					}
 				}
@@ -501,6 +519,9 @@ void stepPPU() {
 			PPU_STATUS.clearVBlank();
 			PPU_STATUS.clearSpriteZero();
 			NMI_occured = false;
+			PPUSCROLL_x = 0;
+			PPUSCROLL_y = 0;
+			PPU_CTRL.reset();
 		}
 		else if (ppuCycles == 340) {
 			ppuScanline = 0;

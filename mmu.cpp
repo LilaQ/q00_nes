@@ -108,7 +108,6 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			writePPUCTRL(val);
 			break;
 		case 0x2001:		//	PPUMASK
-			printf("Writing PPUMASK: %x\n", val);
 			writePPUMASK(val);
 			break;
 		case 0x2003:		//	OAMADDR
