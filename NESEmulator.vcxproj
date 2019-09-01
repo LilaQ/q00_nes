@@ -159,6 +159,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="input.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="cpu.cpp" />
     <ClCompile Include="mmu.cpp" />
@@ -167,6 +168,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cpu.h" />
+    <ClInclude Include="input.h" />
     <ClInclude Include="wmu.h" />
     <ClInclude Include="ppu.h" />
     <ClInclude Include="main.h" />

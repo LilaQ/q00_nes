@@ -4,6 +4,7 @@
 #include "cpu.h"
 #include "mmu.h"
 #include "ppu.h"
+#include "input.h"
 #include "main.h"
 
 unsigned char memory[0x10000];
@@ -12,6 +13,7 @@ bool open_ppuaddr = false;
 ROM_TYPE romType;
 int romPRG16ks = 0;
 int romCHR8ks = 0;
+int poll_input = -1;
 VRAM_MIRRORING vramMirroring = VRAM_MIRRORING::NONE;
 
 void powerUp() {
@@ -95,6 +97,15 @@ uint8_t readFromMem(uint16_t adr) {
 		case 0x4014:		//	OAM DMA
 			return readOAMDATA();
 			break;
+		case 0x4016:		//	CONTROLLER #1
+			if (poll_input >= 0) {
+				uint8_t ret = readController1(poll_input++);
+				if (poll_input > 7)
+					poll_input = -1;	//	disable polling
+				return ret | 0x40;
+			}
+			return 0x40;
+			break;
 		default:
 			return memory[adr];
 			break;
@@ -134,6 +145,9 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, memory);
+			break;
+		case 0x4016:		//	enable / disable input polling
+			poll_input = val;
 			break;
 		default:
 			memory[adr] = val;

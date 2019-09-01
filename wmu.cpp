@@ -13,6 +13,7 @@
 #include "cpu.h"
 #include "mmu.h"
 #include "main.h"
+#include "input.h"
 #include "commctrl.h"
 #undef main
 
@@ -240,6 +241,8 @@ void handleWindowEvents(SDL_Event event) {
 	};
 
 	uint8_t* keys = (uint8_t*)SDL_GetKeyboardState(NULL);
+	//	pass inputs
+	setController1(keys);
 	//	pause/unpause
 	if (keys[SDL_SCANCODE_SPACE]) {
 		togglePause();
