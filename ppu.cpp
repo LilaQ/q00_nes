@@ -462,14 +462,13 @@ void renderScanline(uint16_t row) {
 						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
 						break;
 					case 0x02:	//	vertical flip
-						//	FALLBACK
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8] >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x03:	//	horizontal & vertical flip
-						//	FALLBACK
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8] >> (t % 8)) & 1) * 2;
 						break;
 					}
+
 					uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
 					uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
 					uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
