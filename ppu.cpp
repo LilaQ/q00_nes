@@ -442,8 +442,6 @@ void renderScanline(uint16_t row) {
 		}
 	}
 
-	
-
 	if (PPU_MASK.show_sprites) {
 		for (int i = 63; i >= 0; i--) {
 			Y_Pos = OAM[i * 4] + 1;
@@ -464,8 +462,12 @@ void renderScanline(uint16_t row) {
 						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
 						break;
 					case 0x02:	//	vertical flip
+						//	FALLBACK
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x03:	//	horizontal & vertical flip
+						//	FALLBACK
+						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
 						break;
 					}
 					uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
@@ -481,10 +483,11 @@ void renderScanline(uint16_t row) {
 						//}
 
 						//	sprite zero hit
-						if (!PPU_STATUS.isSpriteZero() && i == 0) {
-							PPU_STATUS.setSpriteZero();
-						}
+							if (!PPU_STATUS.isSpriteZero() && i == 0) {
+								PPU_STATUS.setSpriteZero();
+							}
 					}
+						
 				}
 			}
 		}
