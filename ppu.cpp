@@ -221,11 +221,9 @@ uint8_t readOAMDATA() {
 void writePPUSCROLL(uint8_t val) {
 
 	if (scr_w == 0) {
-		//PPUSCROLL_x = val;
 		scr_w = 1;
 	}
 	else {
-		//PPUSCROLL_y = val;
 		//	set temp scroll values
 		tmp_PPUSCROLL_y = (val >> 3) & 0x1f;
 		tmp_PPUSCROLL_fine_y = val & 7;
@@ -294,11 +292,9 @@ int COLORS[] {
 	DRAW FRAME
 */
 void drawFrame() {
-
 	SDL_UpdateTexture(texture, NULL, framebuffer, 256 * sizeof(unsigned char) * 3);
 	SDL_RenderCopy(renderer, texture, NULL, NULL);
 	SDL_RenderPresent(renderer);
-
 }
 
 
@@ -484,18 +480,18 @@ uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, uint8_t scroll
 
 	uint16_t scrolled_address = adr + (scroll_y / 8) * 0x20;
 
-	//	crossed NT 
-	if ( (adr & 0x400) != (scrolled_address & 0x400) ) {
-		//scrolled_address += 0x40;	//	skip 64 bytes of attribute table
-		scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
-		scrolled_address ^= 0x400;
-		//if((scrolled_address % 0x2000 / 0x800) > 0)
-			
-	}
 	//	appears to be in AT area
-	else if (scrolled_address % 0x400 >= 0x3c0) 	{
-		//printf("from %x to ", scrolled_address);
+	if (scrolled_address % 0x400 >= 0x3c0) 	{
 		scrolled_address = (scrolled_address & 0x2800 ^ 0x800) + ((scrolled_address % 0x400) - 0x3c0);
+	}
+	//	crossed NT 
+	else if ((adr & 0x400) != (scrolled_address & 0x400)) {
+		//	scroll values above what's vertically visible in the viewport, will NOT make the NT change!
+		if (scroll_y < 240) {
+			scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
+			scrolled_address += 0x40;	//	skip 64 bytes of attribute table
+		}
+		scrolled_address ^= 0x400;
 	}
 
 
@@ -519,6 +515,8 @@ void renderScanline(uint16_t row) {
 			uint16_t natural_address = PPU_CTRL.base_nametable_address_value + tile_id;
 			//uint16_t natural_address = 0x2800 + tile_id;
 			uint16_t scrolled_address = translateScrolledAddress(natural_address, PPUSCROLL_x, PPUSCROLL_y, col, r, tile_id);
+			//if (!col)
+				//printf("%x to %x\n", natural_address, scrolled_address);
 			tile_nr = rdV(scrolled_address);												//	tile ID at the current address
 			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + ((r+PPUSCROLL_fine_y) % 8);	//	adress of the tile in CHR RAM
 

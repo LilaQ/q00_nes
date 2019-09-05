@@ -55,4 +55,18 @@ struct UNROM : Mapper {
 
 	}
 
+	virtual void loadMem(unsigned char* c) {
+		for (int i = 0; i < 0x4000; i++) {
+			//	First 16k PRG
+			memory[0x8000 + i] = c[i + 0x10];
+		}
+		for (int i = 0; i < 0x4000; i++) {
+			memory[0xc000 + i] = c[i + 0x10 + (romPRG16ks - 1) * 0x4000];
+		}
+		for (int i = 0; i < 0x2000; i++) {
+			//	NROM
+			writeCHRRAM(c, 0x10 + romPRG16ks * 0x4000);
+		}
+	}
+
 };

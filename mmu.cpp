@@ -8,7 +8,6 @@
 #include "mapper.h"
 #include "main.h"
 
-//unsigned char memory[0x10000];
 bool pbc = false;
 bool open_ppuaddr = false;
 ROM_TYPE romType;
@@ -37,8 +36,13 @@ void idROM(unsigned char c[]) {
 		//	mapper ID
 		switch ((c[7] & 0xf0) | (c[6] >> 4))
 		{
+			//	NROM
 			case 0:
 				mapper = new NROM(0x10000, c[4], 0);
+				break;
+			//	UNROM
+			case 2:
+				mapper = new UNROM(0x400000, c[4], 0);
 				break;
 			default:
 				printf("Unhandled Mapper %d\n", (c[7] & 0xf0) | (c[6] >> 4));
@@ -75,18 +79,6 @@ void loadROM(string filename) {
 	idROM(cartridge);
 
 	mapper->loadMem(cartridge);
-
-	/*for (int i = 0; i < 0x4000; i++) {
-		//	First 16k PRG
-		memory[0x8000 + i] = cartridge[i+0x10];
-	}
-	for (int i = 0; i < 0x4000; i++) {
-			memory[0xc000 + i] = cartridge[i + 0x10 + (romPRG16ks - 1) * 0x4000];
-	}
-	for (int i = 0; i < 0x2000; i++) {
-		//	NROM
-		writeCHRRAM(cartridge, 0x10 + romPRG16ks * 0x4000);
-	}*/
 
 	resetCPU();
 
