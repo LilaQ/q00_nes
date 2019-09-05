@@ -3,7 +3,7 @@
 using namespace::std;
 void initPPU(string filename);
 void stepPPU();
-void writePPUADDR(uint16_t adr, uint8_t cycle_no);
+void writePPUADDR(uint8_t adr);
 void writePPUDATA(uint8_t data);
 uint8_t readPPUDATA();
 void writePPUCTRL(uint8_t val);
@@ -52,6 +52,9 @@ struct PPUCTRL
 		background_pattern_table_adr_value = (background_pattern_table_adr == 0) ? 0x0000 : 0x1000;
 		sprite_pattern_table_adr_value = (sprite_pattern_table_adr == 0) ? 0x0000 : 0x1000;
 		base_nametable_address_value = 0x2000 + (base_nametable_address * 0x400);
+
+		printf("Changed base nametable to %x\n", base_nametable_address_value);
+
 	}
 
 	void reset() {

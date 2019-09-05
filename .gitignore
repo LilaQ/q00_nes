@@ -92,3 +92,6 @@ Release/ppu.obj
 Release/vc142.pdb
 Release/wmu.obj
 Debug/NESEmulator.tlog/link.delete.1.tlog
+golf.nes.deb
+Release/input.obj
+Release/input.obj

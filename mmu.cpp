@@ -5,9 +5,10 @@
 #include "mmu.h"
 #include "ppu.h"
 #include "input.h"
+#include "mapper.h"
 #include "main.h"
 
-unsigned char memory[0x10000];
+//unsigned char memory[0x10000];
 bool pbc = false;
 bool open_ppuaddr = false;
 ROM_TYPE romType;
@@ -15,6 +16,8 @@ int romPRG16ks = 0;
 int romCHR8ks = 0;
 int poll_input = -1;
 VRAM_MIRRORING vramMirroring = VRAM_MIRRORING::NONE;
+
+Mapper *mapper;
 
 void powerUp() {
 	//	TODO
@@ -25,19 +28,22 @@ void reset() {
 }
 
 void idROM(unsigned char c[]) {
+	
 	//	iNES 1.0 - $4E $45 $53 $1A
 	if (c[0] == 0x4e && c[1] == 0x45 && c[2] == 0x53 && c[3] == 0x1a) {
+		
 		printf("iNES 1.0 Header detected\n");
-		if (c[4] == 1) {
-			romType = ROM_TYPE::iNES_16;
-			romPRG16ks = 1;
+		
+		//	mapper ID
+		switch ((c[7] & 0xf0) | (c[6] >> 4))
+		{
+			case 0:
+				mapper = new NROM(0x10000, c[4], 0);
+				break;
+			default:
+				printf("Unhandled Mapper %d\n", (c[7] & 0xf0) | (c[6] >> 4));
+				break;
 		}
-		else if (c[4] == 2) {
-			romType = ROM_TYPE::iNES_32;
-			romPRG16ks = 2;
-		}
-		else
-			printf("Unhandled ROM-Type with %d kb of PRG ROM\n", c[4] * 16);
 
 		//	mirroring
 		if ((c[6] >> 3) & 1) {
@@ -58,7 +64,7 @@ void loadROM(string filename) {
 
 	setPause();
 
-	unsigned char cartridge[0x10000];
+	unsigned char cartridge[0xf0000];
 	FILE* file = fopen(filename.c_str(), "rb");
 	int pos = 0;
 	while (fread(&cartridge[pos], 1, 1, file)) {
@@ -68,7 +74,9 @@ void loadROM(string filename) {
 
 	idROM(cartridge);
 
-	for (int i = 0; i < 0x4000; i++) {
+	mapper->loadMem(cartridge);
+
+	/*for (int i = 0; i < 0x4000; i++) {
 		//	First 16k PRG
 		memory[0x8000 + i] = cartridge[i+0x10];
 	}
@@ -78,7 +86,7 @@ void loadROM(string filename) {
 	for (int i = 0; i < 0x2000; i++) {
 		//	NROM
 		writeCHRRAM(cartridge, 0x10 + romPRG16ks * 0x4000);
-	}
+	}*/
 
 	resetCPU();
 
@@ -107,7 +115,7 @@ uint8_t readFromMem(uint16_t adr) {
 			return 0x40;
 			break;
 		default:
-			return memory[adr];
+			return mapper->read(adr);
 			break;
 	}
 }
@@ -131,26 +139,19 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			writePPUSCROLL(val);
 			break;
 		case 0x2006:		//	PPUADDR
-			if (!open_ppuaddr) {
-				writePPUADDR(val, 0);
-				open_ppuaddr = true;
-			}
-			else {
-				writePPUADDR(val, 1);
-				open_ppuaddr = false;
-			}
+			writePPUADDR(val);
 			break;
 		case 0x2007:		//	PPUDATA
 			writePPUDATA(val);
 			break;
 		case 0x4014:		//	OAM DMA
-			oamDMAtransfer(val, memory);
+			oamDMAtransfer(val, mapper->memory);
 			break;
 		case 0x4016:		//	enable / disable input polling
 			poll_input = val;
 			break;
 		default:
-			memory[adr] = val;
+			mapper->write(adr, val);
 			break;
 	}
 	
@@ -166,36 +167,36 @@ uint16_t getImmediate(uint16_t adr) {
 	return adr;
 }
 uint16_t getAbsolute(uint16_t adr) {
-	return (memory[adr + 1] << 8) | memory[adr];
+	return (mapper->read(adr + 1) << 8) | mapper->read(adr);
 }
 uint16_t getAbsoluteXIndex(uint16_t adr, uint8_t X) {
-	a = ((memory[adr + 1] << 8) | memory[adr]);
+	a = ((mapper->read(adr + 1) << 8) | mapper->read(adr));
 	pbc = (a & 0xff00) != ((a + X) & 0xff00);
 	return (a + X) % 0x10000;
 }
 uint16_t getAbsoluteYIndex(uint16_t adr, uint8_t Y) {
-	a = ((memory[adr + 1] << 8) | memory[adr]);
+	a = ((mapper->read(adr + 1) << 8) | mapper->read(adr));
 	pbc = (a & 0xff00) != ((a + Y) & 0xff00);
 	return (a + Y) % 0x10000;
 }
 uint16_t getZeropage(uint16_t adr) {
-	return memory[adr];
+	return mapper->read(adr);
 }
 uint16_t getZeropageXIndex(uint16_t adr, uint8_t X) {
-	return (memory[adr] + X) % 0x100;
+	return (mapper->read(adr) + X) % 0x100;
 }
 uint16_t getZeropageYIndex(uint16_t adr, uint8_t Y) {
-	return (memory[adr] + Y) % 0x100;
+	return (mapper->read(adr) + Y) % 0x100;
 }
 uint16_t getIndirect(uint16_t adr) {
-	return (memory[memory[adr + 1] << 8 | ((memory[adr] + 1) % 0x100)]) << 8 | memory[memory[adr + 1] << 8 | memory[adr]];
+	return (mapper->read(mapper->read(adr + 1) << 8 | ((mapper->read(adr) + 1) % 0x100))) << 8 | mapper->read(mapper->read(adr + 1) << 8 | mapper->read(adr));
 }
 uint16_t getIndirectXIndex(uint16_t adr, uint8_t X) {
-	a = (memory[(memory[adr] + X + 1) % 0x100] << 8) | memory[(memory[adr] + X) % 0x100];
+	a = (mapper->read((mapper->read(adr) + X + 1) % 0x100) << 8) | mapper->read((mapper->read(adr) + X) % 0x100);
 	return a % 0x10000;
 }
 uint16_t getIndirectYIndex(uint16_t adr, uint8_t Y) {
-	a = ((memory[(memory[adr] + 1) % 0x100] << 8) | (memory[memory[adr]]));
+	a = ((mapper->read((mapper->read(adr) + 1) % 0x100) << 8) | (mapper->read(mapper->read(adr))));
 	pbc = (a & 0xff00) != ((a + Y) & 0xff00);
 	return (a + Y) % 0x10000;
 }

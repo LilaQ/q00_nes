@@ -15,7 +15,8 @@
 using namespace::std;
 
 //	init PPU
-unsigned char VRAM[0x4000];		//	16 kbytes
+unsigned char *_VRAM[0x4000];	//	16 kbytes
+unsigned char pVRAM[0x4000];		
 unsigned char OAM[0x100];		//	256 bytes
 const int FB_SIZE = 256 * 240 * 3;
 SDL_Renderer *renderer, *renderer_nt, *renderer_oam;
@@ -29,7 +30,11 @@ unsigned char framebuffer_oam[256 * 240 * 3];	//	3 bytes per pixel, RGB24 - OAM 
 uint16_t ppuScanline = 0;
 uint16_t ppuCycles = 30;
 uint8_t PPUDATA_buffer = 0x00;
-uint8_t PPUSCROLL_x, PPUSCROLL_y, PPUSCROLL_pos = 0;
+uint8_t PPUSCROLL_x, PPUSCROLL_y, tmp_PPUSCROLL_x, tmp_PPUSCROLL_y, tmp_PPUSCROLL_fine_y, PPUSCROLL_fine_y, PPUSCROLL_pos = 0;
+uint16_t scr_v, scr_t;
+uint8_t scr_x;
+bool scr_w;
+uint8_t nts = 0;
 
 //	Registers
 PPUCTRL PPU_CTRL;
@@ -40,6 +45,14 @@ uint8_t OAMADDR = 0x0;
 bool NMI_occured = false;
 bool NMI_output = false;
 
+void wrV(uint16_t adr, uint8_t val) {
+	pVRAM[*_VRAM[adr]] = val;
+}
+
+uint8_t rdV(uint16_t adr) {
+	return pVRAM[*_VRAM[adr]];
+}
+
 //	DEBUG functions
 uint16_t getPPUCycles() {
 	return ppuCycles;
@@ -48,22 +61,40 @@ uint16_t getPPUScanlines() {
 	return ppuScanline;
 }
 
-//	PPUCTRL write
+//	PPUCTRL write (2000)
 void writePPUCTRL(uint8_t val) {
 	PPU_CTRL.setValue(val);
 	NMI_output = PPU_CTRL.generate_nmi > 0;
-
 	PPU_STATUS.appendLSB(val);
+	nts = val & 3;
 }
 
-//	PPUADDR write
-void writePPUADDR(uint16_t adr, uint8_t cycle_nr) {
-	//printf("VRAM PPUADDR write at: 0x%04x\n", PPUADDR);
-	if (cycle_nr == 0) {
+//	PPUADDR write (2006)
+void writePPUADDR(uint8_t adr) {
+
+	if (scr_w == 0) {
 		PPUADDR = adr << 8;
+		nts = ((adr >> 2) & 3);
+		//PPU_CTRL.setValue((PPU_CTRL.value & 0xfc) | ((adr >> 2) & 3));
+
+		//	set temp scroll values
+		tmp_PPUSCROLL_y &= 7;				//	mask only 3 last bits
+		tmp_PPUSCROLL_y |= (adr & 3) << 3;	//	replace the upper 2 bits, with he LSB from adr
+		tmp_PPUSCROLL_fine_y = (adr >> 4) & 3;
+
+		scr_w = 1;
 	}
 	else {
 		PPUADDR |= adr;
+
+		PPU_CTRL.setValue((PPU_CTRL.value & 0xfc) | nts);
+
+		//	set temp scroll values (also pass to real values)
+		tmp_PPUSCROLL_y &= 0xf8;
+		tmp_PPUSCROLL_y |= (adr >> 5);
+		PPUSCROLL_y = tmp_PPUSCROLL_y;
+
+		scr_w = 0;
 	}
 
 	PPU_STATUS.appendLSB(adr & 0xff);
@@ -108,6 +139,7 @@ uint8_t readPPUSTATUS() {
 	PPU_STATUS.clearVBlank();
 	NMI_occured = false;
 	PPUADDR += PPU_CTRL.ppudata_increment_value;
+	scr_w = 0;
 	return ret;
 }
 
@@ -155,15 +187,20 @@ uint8_t readOAMDATA() {
 	return OAM[OAMADDR];
 }
 
-//	Write PPUSCROLL
+//	Write PPUSCROLL (2005)
 void writePPUSCROLL(uint8_t val) {
-	if (PPUSCROLL_pos == 0) {
-		PPUSCROLL_pos = 1;
-		PPUSCROLL_x = val;
+
+	if (scr_w == 0) {
+		//PPUSCROLL_x = val;
+		scr_w = 1;
 	}
 	else {
-		PPUSCROLL_pos = 0;
-		PPUSCROLL_y = val;
+		//PPUSCROLL_y = val;
+		//	set temp scroll values
+		tmp_PPUSCROLL_y = (val >> 3) & 0x1f;
+		tmp_PPUSCROLL_fine_y = val & 7;
+
+		scr_w = 0;
 	}
 }
 
@@ -328,8 +365,6 @@ void drawOAM() {
 					framebuffer_oam[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
 					framebuffer_oam[((Y_Pos + 1 + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
 
-					if(i==0)
-						printf("%d\n", Y_Pos + 1 + j);
 				}
 			}
 		}
@@ -404,6 +439,42 @@ uint8_t getAttributeTilePart(uint16_t adr) {
 	return tilePar * 2;
 }
 
+uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, uint8_t scroll_y, uint8_t x, uint8_t y, uint8_t tile_id) {
+
+
+	//uint16_t scrolled_address = adr + (scroll_x / 8);
+
+	bool change = false;
+
+	/*if (((scrolled_address & 0xffe0) != (adr & 0xffe0)) || ((x > 128) && ((tile_id % 32) == 0)))		//	check if X-boundary crossed ( AND account for transfer-tile glitch)
+	{
+		scrolled_address ^= 0x400;	//	XOR the bit, that changes NTs horizontally
+		change = true;
+	}*/
+
+	uint16_t scrolled_address = adr + (scroll_y / 8) * 0x20;
+
+	//	crossed NT 
+	if ( (adr & 0x400) != (scrolled_address & 0x400) ) {
+		scrolled_address += 0x40;	//	skip 64 bytes of attribute table
+		scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
+		scrolled_address ^= 0x400;
+		//if((scrolled_address % 0x2000 / 0x800) > 0)
+			
+	}
+	//	appears to be in AT area
+	else if (scrolled_address % 0x400 >= 0x3c0) 	{
+		//printf("from %x to ", scrolled_address);
+		scrolled_address = (scrolled_address & 0x2800 ^ 0x800) + ((scrolled_address % 0x400) - 0x3c0);
+	}
+
+
+	if(change)
+		scrolled_address -= 0x20;	//	remove the 'line break'
+
+	return scrolled_address;
+}
+
 /*
 	CALC SCANLINE ARRAY FOR ROW X
 */
@@ -411,19 +482,15 @@ uint16_t tile_id, tile_nr, adr, tile_attr_nr, attr_shift, palette_offset, Palett
 uint8_t pixel, Y_Pos, Tile_Index_Nr, Attributes, X_Pos;
 void renderScanline(uint16_t row) {
 
-	int r = row ;
+	int r = row;
 	if (PPU_MASK.show_bg) {
 		for (int col = 0; col < 256; col++) {
-			tile_id = ((r / 8) * 32) + ((col + PPUSCROLL_x % 8) / 8);					//	sequential tile number
+			tile_id = (((r+PPUSCROLL_fine_y) / 8) * 32) + ((col + PPUSCROLL_x % 8) / 8);					//	sequential tile number
 			uint16_t natural_address = PPU_CTRL.base_nametable_address_value + tile_id;
-			uint16_t scrolled_address = natural_address + PPUSCROLL_x / 8;
-			if (((natural_address & 0xffe0) != (scrolled_address & 0xffe0)) || ((col > 128) && ((tile_id % 32) == 0)))		//	check if X-boundary crossed ( AND account for transfer-tile glitch)
-			{
-				scrolled_address ^= 0x400;	//	XOR the bit, that changes NTs horizontally
-				scrolled_address -= 0x20;	//	remove the 'line break'
-			}
-			tile_nr = VRAM[scrolled_address];								//	tile ID at the current address
-			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + (r % 8);	//	adress of the tile in CHR RAM
+			//uint16_t natural_address = 0x2800 + tile_id;
+			uint16_t scrolled_address = translateScrolledAddress(natural_address, PPUSCROLL_x, PPUSCROLL_y, col, r, tile_id);
+			tile_nr = VRAM[scrolled_address];												//	tile ID at the current address
+			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + ((r+PPUSCROLL_fine_y) % 8);	//	adress of the tile in CHR RAM
 
 			//	select the correct byte of the attribute table
 			tile_attr_nr = getAttribute(scrolled_address);
@@ -431,7 +498,6 @@ void renderScanline(uint16_t row) {
 			//	select the part of the byte that we need (2-bits)
 			attr_shift = getAttributeTilePart(scrolled_address);
 			palette_offset = ((tile_attr_nr >> attr_shift) & 0x3) * 4;
-
 
 			pixel = ((VRAM[adr] >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) + (((VRAM[adr + 8] >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) * 2);
 
@@ -501,19 +567,22 @@ void stepPPU() {
 		ppuCycles -= 341;
 		ppuScanline++;
 	}
-	//printf("PPU Cycles: %d Scanlines: %d\n", ppuCycles, ppuScanline);
-	if (0 <= ppuScanline && ppuScanline <= 239) {	//	drawing
-		if(ppuCycles == 0)
+	if (0 <= ppuScanline && ppuScanline <= 239) {		//	drawing
+		if (ppuCycles == 340) {
 			renderScanline(ppuScanline);
+		}
 	}
 	else if (ppuScanline == 241 && ppuCycles == 1) {	//	VBlank 
 		//printf("VBlanking!\n");
+		drawFrame();
 		PPU_STATUS.setVBlank();
 		if (PPU_CTRL.generate_nmi) {
 			NMI_occured = true;
 			NMI_output = true;
 		}
-		drawFrame();
+		/*PPUSCROLL_y = (tmp_PPUSCROLL_y << 3);
+		PPUSCROLL_fine_y = tmp_PPUSCROLL_fine_y;*/
+		
 	}
 	else if (ppuScanline == 261) {
 		//	VBlank off / pre-render line
@@ -521,12 +590,14 @@ void stepPPU() {
 			PPU_STATUS.clearVBlank();
 			PPU_STATUS.clearSpriteZero();
 			NMI_occured = false;
-			PPUSCROLL_x = 0;
-			PPUSCROLL_y = 0;
-			PPU_CTRL.reset();
 		}
-		else if (ppuCycles == 340) {
+		else if (ppuCycles >= 340) {
 			ppuScanline = 0;
+			if (PPU_MASK.show_bg) {	//	TODO: OR sprites?
+				PPUSCROLL_y = (tmp_PPUSCROLL_y << 3);
+				PPUSCROLL_fine_y = tmp_PPUSCROLL_fine_y;
+			}
+			printf("%x %x\n", PPU_CTRL.base_nametable_address_value, nts);
 		}
 
 	}

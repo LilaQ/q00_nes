@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\mapper">
+      <UniqueIdentifier>{c3473fbc-effc-4f5b-9897-27f81871e901}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -52,6 +55,9 @@
     </ClInclude>
     <ClInclude Include="input.h">
       <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mapper.h">
+      <Filter>Source Files\mapper</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
