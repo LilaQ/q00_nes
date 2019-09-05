@@ -45,12 +45,42 @@ uint8_t OAMADDR = 0x0;
 bool NMI_occured = false;
 bool NMI_output = false;
 
+void initVRAM(VRAM_MIRRORING m) {
+	for (int i = 0; i < 0x4000; i++) {
+		_VRAM[i] = &pVRAM[i];
+	}
+	switch (m)
+	{
+	case VERTICAL:
+		for (int i = 0; i < 0x400; i++) {
+			_VRAM[0x2000 + i] = &pVRAM[0x2000 + i];
+			_VRAM[0x2800 + i] = &pVRAM[0x2000 + i];
+			_VRAM[0x2400 + i] = &pVRAM[0x2400 + i];
+			_VRAM[0x2c00 + i] = &pVRAM[0x2400 + i];
+		}
+		break;
+		break;
+	case HORIZONTAL:
+		for (int i = 0; i < 0x400; i++) {
+			_VRAM[0x2000 + i] = &pVRAM[0x2000 + i];
+			_VRAM[0x2400 + i] = &pVRAM[0x2000 + i];
+			_VRAM[0x2800 + i] = &pVRAM[0x2800 + i];
+			_VRAM[0x2c00 + i] = &pVRAM[0x2800 + i];
+		}
+		break;
+	case NONE:
+	default:
+		break;
+	}
+}
+
 void wrV(uint16_t adr, uint8_t val) {
-	pVRAM[*_VRAM[adr]] = val;
+	*_VRAM[adr] = val;
+
 }
 
 uint8_t rdV(uint16_t adr) {
-	return pVRAM[*_VRAM[adr]];
+	return *_VRAM[adr];
 }
 
 //	DEBUG functions
@@ -103,22 +133,22 @@ void writePPUADDR(uint8_t adr) {
 //	PPUDATA write
 void writePPUDATA(uint8_t data) {
 	if (PPUADDR == 0x3f10)
-		VRAM[0x3f00] = data;
+		wrV(0x3f00, data);
 	if (PPUADDR == 0x3f14)
-		VRAM[0x3f04] = data;
+		wrV(0x3f04, data);
 	if (PPUADDR == 0x3f18)
-		VRAM[0x3f08] = data;
+		wrV(0x3f08, data);
 	if (PPUADDR == 0x3f1c)
-		VRAM[0x3f0c] = data;
+		wrV(0x3f0c, data);
 	if (PPUADDR == 0x3f00)
-		VRAM[0x3f10] = data;
+		wrV(0x3f10, data);
 	if (PPUADDR == 0x3f04)
-		VRAM[0x3f14] = data;
+		wrV(0x3f14, data);
 	if (PPUADDR == 0x3f08)
-		VRAM[0x3f18] = data;
+		wrV(0x3f18, data);
 	if (PPUADDR == 0x3f0c)
-		VRAM[0x3f1c] = data;
-	VRAM[PPUADDR] = data;
+		wrV(0x3f1c, data);
+	wrV(PPUADDR, data);
 	PPUADDR += PPU_CTRL.ppudata_increment_value;
 	//	TODO : VRAM mirroring
 
@@ -128,7 +158,7 @@ void writePPUDATA(uint8_t data) {
 //	PPUDATA read
 uint8_t readPPUDATA() {
 	uint8_t ret = PPUDATA_buffer;
-	PPUDATA_buffer = VRAM[PPUADDR];
+	PPUDATA_buffer = rdV(PPUADDR);
 	PPUADDR += PPU_CTRL.ppudata_increment_value;
 	return ret;
 }
@@ -156,7 +186,7 @@ bool NMIinterrupt() {
 //	Load cartridge, map CHR-ROM to CHR-RAM (NROM)
 void writeCHRRAM(unsigned char cartridge[], uint16_t offset) {
 	for (int i = 0; i < 0x2000; i++) {
-		VRAM[i] = cartridge[offset + i];
+		wrV(i, cartridge[offset + i]);
 	}
 }
 
@@ -297,7 +327,7 @@ void drawCHRTable() {
 		for (int col = 0; col < 128; col++) {
 			uint16_t adr = (r / 8 * 0x100) + (r % 8) + (col / 8) * 0x10;
 
-			uint8_t pixel = ((VRAM[adr] >> (7-(col % 8))) & 1) + ((VRAM[adr + 8] >> (7-(col % 8))) & 1) * 2;
+			uint8_t pixel = ((rdV(adr) >> (7-(col % 8))) & 1) + ((rdV(adr + 8) >> (7-(col % 8))) & 1) * 2;
 			framebuffer_chr[(r * 128 * 3) + (col * 3)] = COLORS[pixel];
 			framebuffer_chr[(r * 128 * 3) + (col * 3) + 1] = COLORS[pixel];
 			framebuffer_chr[(r * 128 * 3) + (col * 3) + 2] = COLORS[pixel];
@@ -345,19 +375,19 @@ void drawOAM() {
 				uint8_t V = 0x00;
 				switch ((Attributes >> 6) & 3) {
 					case 0x00:	//	no flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j) >> (7 - (t % 8))) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8) >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x01:	//	horizontal flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
+						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j) >> (t % 8)) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8) >> (t % 8)) & 1) * 2;
 						break;
 					case 0x02:	//	vertical flip
 						break;
 					case 0x03:	//	horizontal & vertical flip
 						break;
 				}
-				uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
-				uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
-				uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
+				uint8_t R = (PALETTE[rdV(Palette_Offset + V)] >> 16) & 0xff;
+				uint8_t G = (PALETTE[rdV(Palette_Offset + V)] >> 8) & 0xff;
+				uint8_t B = PALETTE[rdV(Palette_Offset + V)] & 0xff;
 
 				if (V) {
 					//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
@@ -400,20 +430,20 @@ void drawNameTables() {
 			uint16_t tile_id = ((r / 8) * 32) + (col / 8);												//	sequential tile number
 			uint16_t natural_address = 0x2000 + tile_id;
 			natural_address += 0x40 * ((natural_address % 0x2000) / 0x3c0);
-			uint16_t tile_nr = VRAM[natural_address];													//	tile ID at the current address (skip attribute tables)
+			uint16_t tile_nr = rdV(natural_address);													//	tile ID at the current address (skip attribute tables)
 			uint16_t adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + (r % 8);	//	adress of the tile in CHR RAM
 
 			//	select the correct byte of the attribute table
-			uint16_t tile_attr_nr = VRAM[(natural_address & 0xfc00) + 0x03c0 + (((((r + (r / 240) * 16) / 32) * 8) + (col / 32)) % 0x40)];
+			uint16_t tile_attr_nr = rdV((natural_address & 0xfc00) + 0x03c0 + (((((r + (r / 240) * 16) / 32) * 8) + (col / 32)) % 0x40));
 
 			//	select the part of the byte that we need (2-bits)
 			uint16_t attr_shift = (((tile_id % 32) / 2 % 2) + ( (tile_id + (r/240) * 64) / 64 % 2) * 2) * 2;
 			uint16_t palette_offset = ((tile_attr_nr >> attr_shift) & 0x3) * 4;
-			uint8_t pixel = ((VRAM[adr] >> (7 - (col % 8))) & 1) + (((VRAM[adr + 8] >> (7 - (col % 8))) & 1) * 2);
+			uint8_t pixel = ((rdV(adr) >> (7 - (col % 8))) & 1) + (((rdV(adr + 8) >> (7 - (col % 8))) & 1) * 2);
 
-			framebuffer_nt[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[fixPalette(0x3f00 + palette_offset + pixel)]] >> 16 ) & 0xff;
-			framebuffer_nt[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[VRAM[fixPalette(0x3f00 + palette_offset + pixel)]] >> 8) & 0xff;
-			framebuffer_nt[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[VRAM[fixPalette(0x3f00 + palette_offset + pixel)]] ) & 0xff;
+			framebuffer_nt[(r * 256 * 3) + (col * 3)] = (PALETTE[rdV(fixPalette(0x3f00 + palette_offset + pixel))] >> 16 ) & 0xff;
+			framebuffer_nt[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[rdV(fixPalette(0x3f00 + palette_offset + pixel))] >> 8) & 0xff;
+			framebuffer_nt[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[rdV(fixPalette(0x3f00 + palette_offset + pixel))] ) & 0xff;
 
 		}
 	}
@@ -430,7 +460,7 @@ uint16_t getAttribute(uint16_t adr) {
 	uint16_t diff = adr - (adr & 0xfc00);
 	uint16_t cell = (diff / 128) * 8 + ((diff % 128) % 32 / 4);
 	//printf("adr 0x%04x gets attribute address 0x%04x (base: 0x%04x diff: 0x%04x)\n", adr, base + cell, base, diff);
-	return VRAM[base + cell];
+	return rdV(base + cell);
 }
 
 uint8_t getAttributeTilePart(uint16_t adr) {
@@ -456,7 +486,7 @@ uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, uint8_t scroll
 
 	//	crossed NT 
 	if ( (adr & 0x400) != (scrolled_address & 0x400) ) {
-		scrolled_address += 0x40;	//	skip 64 bytes of attribute table
+		//scrolled_address += 0x40;	//	skip 64 bytes of attribute table
 		scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
 		scrolled_address ^= 0x400;
 		//if((scrolled_address % 0x2000 / 0x800) > 0)
@@ -489,7 +519,7 @@ void renderScanline(uint16_t row) {
 			uint16_t natural_address = PPU_CTRL.base_nametable_address_value + tile_id;
 			//uint16_t natural_address = 0x2800 + tile_id;
 			uint16_t scrolled_address = translateScrolledAddress(natural_address, PPUSCROLL_x, PPUSCROLL_y, col, r, tile_id);
-			tile_nr = VRAM[scrolled_address];												//	tile ID at the current address
+			tile_nr = rdV(scrolled_address);												//	tile ID at the current address
 			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + ((r+PPUSCROLL_fine_y) % 8);	//	adress of the tile in CHR RAM
 
 			//	select the correct byte of the attribute table
@@ -499,11 +529,11 @@ void renderScanline(uint16_t row) {
 			attr_shift = getAttributeTilePart(scrolled_address);
 			palette_offset = ((tile_attr_nr >> attr_shift) & 0x3) * 4;
 
-			pixel = ((VRAM[adr] >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) + (((VRAM[adr + 8] >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) * 2);
+			pixel = ((rdV(adr) >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) + (((rdV(adr + 8) >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) * 2);
 
-			framebuffer[(r * 256 * 3) + (col * 3)] = (PALETTE[VRAM[fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f)]] >> 16) & 0xff;
-			framebuffer[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[VRAM[fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f)]] >> 8) & 0xff;
-			framebuffer[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[VRAM[fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f)]]) & 0xff;
+			framebuffer[(r * 256 * 3) + (col * 3)] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))] >> 16) & 0xff;
+			framebuffer[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))] >> 8) & 0xff;
+			framebuffer[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))]) & 0xff;
 
 		}
 	}
@@ -522,22 +552,22 @@ void renderScanline(uint16_t row) {
 					uint8_t V = 0x00;
 					switch ((Attributes >> 6) & 3) {
 					case 0x00:	//	no flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (7 - (t % 8))) & 1) * 2;
+						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j) >> (7 - (t % 8))) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8) >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x01:	//	horizontal flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8] >> (t % 8)) & 1) * 2;
+						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j) >> (t % 8)) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8) >> (t % 8)) & 1) * 2;
 						break;
 					case 0x02:	//	vertical flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)] >> (7 - (t % 8))) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8] >> (7 - (t % 8))) & 1) * 2;
+						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)) >> (7 - (t % 8))) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8) >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x03:	//	horizontal & vertical flip
-						V = ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)] >> (t % 8)) & 1) + ((VRAM[PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8] >> (t % 8)) & 1) * 2;
+						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)) >> (t % 8)) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8) >> (t % 8)) & 1) * 2;
 						break;
 					}
 
-					uint8_t R = (PALETTE[VRAM[Palette_Offset + V]] >> 16) & 0xff;
-					uint8_t G = (PALETTE[VRAM[Palette_Offset + V]] >> 8) & 0xff;
-					uint8_t B = PALETTE[VRAM[Palette_Offset + V]] & 0xff;
+					uint8_t R = (PALETTE[rdV(Palette_Offset + V)] >> 16) & 0xff;
+					uint8_t G = (PALETTE[rdV(Palette_Offset + V)] >> 8) & 0xff;
+					uint8_t B = PALETTE[rdV(Palette_Offset + V)] & 0xff;
 
 					if (V) {
 						//if (!((Attributes >> 5) & 1)) {

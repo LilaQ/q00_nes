@@ -46,12 +46,12 @@ void idROM(unsigned char c[]) {
 		}
 
 		//	mirroring
-		if ((c[6] >> 3) & 1) {
-			if (c[6] & 1)
-				vramMirroring = VRAM_MIRRORING::HORIZONTAL;
-			else
-				vramMirroring = VRAM_MIRRORING::VERTICAL;
-		}
+		if (c[6] & 1)
+			vramMirroring = VRAM_MIRRORING::VERTICAL;
+		else
+			vramMirroring = VRAM_MIRRORING::HORIZONTAL;
+
+		initVRAM(vramMirroring);
 	}
 }
 

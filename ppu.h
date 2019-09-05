@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include "mmu.h"
 using namespace::std;
 void initPPU(string filename);
 void stepPPU();
@@ -18,6 +19,7 @@ void drawNameTables();
 void oamDMAtransfer(uint8_t val, unsigned char memory[]);
 void writeOAMADDR(uint8_t val);
 void writeOAMDATA(uint8_t val);
+void initVRAM(VRAM_MIRRORING m);
 uint8_t readOAMDATA();
 uint16_t getPPUCycles();
 uint16_t getPPUScanlines();
