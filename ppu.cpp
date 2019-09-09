@@ -221,6 +221,10 @@ uint8_t readOAMDATA() {
 void writePPUSCROLL(uint8_t val) {
 
 	if (scr_w == 0) {
+
+		//	set temp scroll values
+		tmp_PPUSCROLL_x = (val & 0x1f);
+
 		scr_w = 1;
 	}
 	else {
@@ -418,7 +422,7 @@ void drawNameTables() {
 
 	//	window decorations
 	char title[50];
-	snprintf(title, sizeof title, "[ nametables ]", 0);
+	snprintf(title, sizeof title, "[ nametables ]");
 	SDL_SetWindowTitle(window_nt, title);
 
 	for (int r = 0; r < 960; r++) {
@@ -468,20 +472,21 @@ uint8_t getAttributeTilePart(uint16_t adr) {
 uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, uint8_t scroll_y, uint8_t x, uint8_t y, uint8_t tile_id) {
 
 
-	//uint16_t scrolled_address = adr + (scroll_x / 8);
+	uint16_t scrolled_address = adr + (scroll_x / 8);
 
 	bool change = false;
 
-	/*if (((scrolled_address & 0xffe0) != (adr & 0xffe0)) || ((x > 128) && ((tile_id % 32) == 0)))		//	check if X-boundary crossed ( AND account for transfer-tile glitch)
+	if (((scrolled_address & 0xffe0) != (adr & 0xffe0)) || ((x > 128) && ((tile_id % 32) == 0)))		//	check if X-boundary crossed ( AND account for transfer-tile glitch)
 	{
+		scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
 		scrolled_address ^= 0x400;	//	XOR the bit, that changes NTs horizontally
 		change = true;
-	}*/
+	}
 
-	uint16_t scrolled_address = adr + (scroll_y / 8) * 0x20;
+	//uint16_t scrolled_address = adr + (scroll_y / 8) * 0x20;
 
 	//	appears to be in AT area
-	if (scrolled_address % 0x400 >= 0x3c0) 	{
+	/*if (scrolled_address % 0x400 >= 0x3c0) 	{
 		scrolled_address = (scrolled_address & 0x2800 ^ 0x800) + ((scrolled_address % 0x400) - 0x3c0);
 	}
 	//	crossed NT 
@@ -492,7 +497,7 @@ uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, uint8_t scroll
 			scrolled_address += 0x40;	//	skip 64 bytes of attribute table
 		}
 		scrolled_address ^= 0x400;
-	}
+	}*/
 
 
 	if(change)
@@ -513,10 +518,7 @@ void renderScanline(uint16_t row) {
 		for (int col = 0; col < 256; col++) {
 			tile_id = (((r+PPUSCROLL_fine_y) / 8) * 32) + ((col + PPUSCROLL_x % 8) / 8);					//	sequential tile number
 			uint16_t natural_address = PPU_CTRL.base_nametable_address_value + tile_id;
-			//uint16_t natural_address = 0x2800 + tile_id;
 			uint16_t scrolled_address = translateScrolledAddress(natural_address, PPUSCROLL_x, PPUSCROLL_y, col, r, tile_id);
-			//if (!col)
-				//printf("%x to %x\n", natural_address, scrolled_address);
 			tile_nr = rdV(scrolled_address);												//	tile ID at the current address
 			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + ((r+PPUSCROLL_fine_y) % 8);	//	adress of the tile in CHR RAM
 
@@ -622,11 +624,10 @@ void stepPPU() {
 		else if (ppuCycles >= 340) {
 			ppuScanline = 0;
 			if (PPU_MASK.show_bg) {	//	TODO: OR sprites?
+				PPUSCROLL_x = (tmp_PPUSCROLL_x << 3) | scr_x;
 				PPUSCROLL_y = (tmp_PPUSCROLL_y << 3);
 				PPUSCROLL_fine_y = tmp_PPUSCROLL_fine_y;
 			}
-			printf("%x %x\n", PPU_CTRL.base_nametable_address_value, nts);
 		}
-
 	}
 }

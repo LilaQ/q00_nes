@@ -55,8 +55,6 @@ struct PPUCTRL
 		sprite_pattern_table_adr_value = (sprite_pattern_table_adr == 0) ? 0x0000 : 0x1000;
 		base_nametable_address_value = 0x2000 + (base_nametable_address * 0x400);
 
-		printf("Changed base nametable to %x\n", base_nametable_address_value);
-
 	}
 
 	void reset() {

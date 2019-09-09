@@ -11,8 +11,6 @@
 bool pbc = false;
 bool open_ppuaddr = false;
 ROM_TYPE romType;
-int romPRG16ks = 0;
-int romCHR8ks = 0;
 int poll_input = -1;
 VRAM_MIRRORING vramMirroring = VRAM_MIRRORING::NONE;
 
@@ -38,10 +36,12 @@ void idROM(unsigned char c[]) {
 		{
 			//	NROM
 			case 0:
+				printf("NROM cartridge!\n");
 				mapper = new NROM(0x10000, c[4], 0);
 				break;
 			//	UNROM
 			case 2:
+				printf("UnROM cartridge!\n");
 				mapper = new UNROM(0x400000, c[4], 0);
 				break;
 			default:
