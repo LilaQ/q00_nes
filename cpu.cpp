@@ -42,7 +42,7 @@ uint8_t ADD(uint8_t val, uint8_t cycles) {
 	uint16_t sum = registers.A + val + status.carry;
 	status.setOverflow((~(registers.A ^ val) & (registers.A ^ sum) & 0x80) > 0);
 	status.setCarry(sum > 0xff);
-	registers.A = sum;
+	registers.A = sum & 0xff;
 	status.setZero(registers.A == 0);
 	status.setNegative(registers.A >> 7);
 	return cycles;
