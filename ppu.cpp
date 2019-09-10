@@ -472,10 +472,12 @@ uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, uint8_t scroll
 
 
 	uint16_t scrolled_address = adr + (scroll_y / 8) * 0x20;
+	bool y_mod = false;
 
 	//	appears to be in AT area
 	if (scrolled_address % 0x400 >= 0x3c0) {
 		scrolled_address = (scrolled_address & 0x2800 ^ 0x800) + ((scrolled_address % 0x400) - 0x3c0);
+		y_mod = true;
 	}
 	//	crossed NT
 	else if ((adr & 0x400) != (scrolled_address & 0x400)) {
@@ -494,29 +496,13 @@ uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, uint8_t scroll
 
 	if (((scrolled_address & 0xffe0) != (temp_adr & 0xffe0)) || ((x > 128) && ((tile_id % 32) == 0)))		//	check if X-boundary crossed ( AND account for transfer-tile glitch)
 	{
+		if (y_mod) {
+			scrolled_address = adr + (scroll_y / 8) * 0x20 + (scroll_x / 8);
+		}
 		scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
 		scrolled_address ^= 0x400;	//	XOR the bit, that changes NTs horizontally
 		x_correct = true;
 	}
-
-	//uint16_t scrolled_address = adr + (scroll_y / 8) * 0x20;
-
-	//	appears to be in AT area
-	/*if (scrolled_address % 0x400 >= 0x3c0) 	{
-		scrolled_address = (scrolled_address & 0x2800 ^ 0x800) + ((scrolled_address % 0x400) - 0x3c0);
-	}
-	//	crossed NT 
-	else if ((adr & 0x400) != (scrolled_address & 0x400)) {
-		//	scroll values above what's vertically visible in the viewport, will NOT make the NT change!
-		if (scroll_y < 240) {
-			scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
-			scrolled_address += 0x40;	//	skip 64 bytes of attribute table
-		}
-		scrolled_address ^= 0x400;
-	}*/
-
-	
-
 
 	if (x_correct) {
 		scrolled_address -= 0x20;	//	remove the 'line break'
