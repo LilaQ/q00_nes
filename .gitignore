@@ -100,3 +100,12 @@ Release/input.obj
 Release/NESEmulator.Build.CppClean.log
 Release/NESEmulator.vcxproj.FileListAbsolute.txt
 Release/input.obj
+Debug/blargg_ppu_tests_2005.09.15b/readme.txt
+Debug/blargg_ppu_tests_2005.09.15b/source/palette_ram.asm
+Debug/blargg_ppu_tests_2005.09.15b/source/power_up_palette.asm
+Debug/blargg_ppu_tests_2005.09.15b/source/prefix_ppu.asm
+Debug/blargg_ppu_tests_2005.09.15b/source/sprite_ram.asm
+Debug/blargg_ppu_tests_2005.09.15b/source/vbl_clear_time.asm
+Debug/blargg_ppu_tests_2005.09.15b/source/vram_access.asm
+Debug/sprite_hit_timing/sprite_hit_timing.asm
+dt.nes.deb

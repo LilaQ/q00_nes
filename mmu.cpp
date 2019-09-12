@@ -39,6 +39,11 @@ void idROM(unsigned char c[]) {
 				printf("NROM cartridge!\n");
 				mapper = new NROM(0x10000, c[4], 0);
 				break;
+			//	MMC1
+			case 1:
+				printf("MMC1 cartridge!\n");
+				mapper = new MMC1(0x400000, c[4], 0);
+				break;
 			//	UNROM
 			case 2:
 				printf("UnROM cartridge!\n");
