@@ -9,6 +9,7 @@ void writePPUDATA(uint8_t data);
 uint8_t readPPUDATA();
 void writePPUCTRL(uint8_t val);
 void writeCHRRAM(unsigned char cartridge[], uint16_t offset);
+void stopNMI();
 uint8_t readPPUSTATUS();
 void writePPUSCROLL(uint8_t val);
 void writePPUMASK(uint8_t val);

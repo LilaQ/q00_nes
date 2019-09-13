@@ -199,6 +199,7 @@ int stepCPU() {
 		writeToMem(SP_ + 0x100, status.status | 0x30);
 		SP_--;
 		PC = (readFromMem(0xfffb) << 8) | readFromMem(0xfffa);
+		stopNMI();
 	}
 
 	//printf("%04x %02x %02x %02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, getPPUCycles(), getPPUScanlines(), c);
