@@ -18,12 +18,13 @@ using namespace::std;
 unsigned char *_VRAM[0x4000];	//	16 kbytes
 unsigned char pVRAM[0x4000];		
 unsigned char OAM[0x100];		//	256 bytes
-const int FB_SIZE = 256 * 240 * 3;
+const int FB_SIZE = 256 * 240 * 4;
 SDL_Renderer *renderer, *renderer_nt, *renderer_oam;
 SDL_Window *window, *window_nt, *window_oam;
 SDL_Texture *texture, *texture_nt, *texture_oam;
-unsigned char framebuffer[FB_SIZE];		//	3 bytes per pixel, RGB24
-unsigned char framebuffer_bg[FB_SIZE];	//	3 bytes per pixel, RGB24
+unsigned char framebuffer[FB_SIZE];		//	4 bytes per pixel, RGBA24
+bool fb_bg_alpha[256 * 240 * 4];
+unsigned char framebuffer_bg[256 * 240 * 3];	//	3 bytes per pixel, RGB24
 unsigned char framebuffer_chr[256 * 128 * 3];	//	3 bytes per pixel, RGB24 - CHR / Pattern Table
 unsigned char framebuffer_nt[256 * 960 * 3];	//	3 bytes per pixel, RGB24 - Nametables
 unsigned char framebuffer_oam[256 * 240 * 3];	//	3 bytes per pixel, RGB24 - OAM / Sprites
@@ -275,7 +276,7 @@ void initPPU(string filename) {
 	SDL_SetWindowResizable(window, SDL_TRUE);
 
 	//	for fast rendering, create a texture
-	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 240);
+	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, 256, 240);
 
 	/*
 		INIT WINDOW
@@ -296,7 +297,7 @@ int COLORS[] {
 	DRAW FRAME
 */
 void drawFrame() {
-	SDL_UpdateTexture(texture, NULL, framebuffer, 256 * sizeof(unsigned char) * 3);
+	SDL_UpdateTexture(texture, NULL, framebuffer, 256 * sizeof(unsigned char) * 4);
 	SDL_RenderCopy(renderer, texture, NULL, NULL);
 	SDL_RenderPresent(renderer);
 }
@@ -535,9 +536,11 @@ void renderScanline(uint16_t row) {
 
 			pixel = ((rdV(adr) >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) + (((rdV(adr + 8) >> (7 - ((col + PPUSCROLL_x % 8) % 8))) & 1) * 2);
 
-			framebuffer[(r * 256 * 3) + (col * 3)] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))] >> 16) & 0xff;
-			framebuffer[(r * 256 * 3) + (col * 3) + 1] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))] >> 8) & 0xff;
-			framebuffer[(r * 256 * 3) + (col * 3) + 2] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))]) & 0xff;
+			framebuffer[(r * 256 * 4) + (col * 4)] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))] >> 16) & 0xff;
+			framebuffer[(r * 256 * 4) + (col * 4) + 1] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))] >> 8) & 0xff;
+			framebuffer[(r * 256 * 4) + (col * 4) + 2] = (PALETTE[rdV(fixPalette((0x3f00 + palette_offset + pixel) & 0xff0f))]) & 0xff;
+			framebuffer[(r * 256 * 4) + (col * 4) + 3] = 0xff;
+			fb_bg_alpha[r * 256 * 4 + col * 4] = (pixel) ? true : false;
 
 		}
 	}
@@ -553,19 +556,20 @@ void renderScanline(uint16_t row) {
 				//	iterate through 8x8 or 8x16 sprite in Pattern Table, with offset of Y_Pos and X_Pos
 				int j = r - Y_Pos;
 				for (int t = 0; t < 8; t++) {
-					uint8_t V = 0x00;
+					uint16_t V = 0x00;
+					uint16_t Tile = (PPU_CTRL.sprite_size) ? (Tile_Index_Nr & 1) * 0x1000 | (Tile_Index_Nr ) * 0x10 : PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10;
 					switch ((Attributes >> 6) & 3) {
 					case 0x00:	//	no flip
-						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j) >> (7 - (t % 8))) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8) >> (7 - (t % 8))) & 1) * 2;
+						V = ((rdV(Tile + j) >> (7 - (t % 8))) & 1) + ((rdV(Tile + j + 8) >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x01:	//	horizontal flip
-						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j) >> (t % 8)) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + j + 8) >> (t % 8)) & 1) * 2;
+						V = ((rdV(Tile + j) >> (t % 8)) & 1) + ((rdV(Tile + j + 8) >> (t % 8)) & 1) * 2;
 						break;
 					case 0x02:	//	vertical flip
-						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)) >> (7 - (t % 8))) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8) >> (7 - (t % 8))) & 1) * 2;
+						V = ((rdV(Tile + (7 - j)) >> (7 - (t % 8))) & 1) + ((rdV(Tile + (7 - j) + 8) >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x03:	//	horizontal & vertical flip
-						V = ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j)) >> (t % 8)) & 1) + ((rdV(PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10 + (7 - j) + 8) >> (t % 8)) & 1) * 2;
+						V = ((rdV(Tile + (7 - j)) >> (t % 8)) & 1) + ((rdV(Tile + (7 - j) + 8) >> (t % 8)) & 1) * 2;
 						break;
 					}
 
@@ -574,12 +578,13 @@ void renderScanline(uint16_t row) {
 					uint8_t B = PALETTE[rdV(Palette_Offset + V)] & 0xff;
 
 					if (V) {
-						//if (!((Attributes >> 5) & 1)) {
+						if (!((Attributes >> 5) & 1) || !fb_bg_alpha[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4)]) {
 							//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
-							framebuffer[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3)] = R;
-							framebuffer[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3) + 1] = G;
-							framebuffer[((Y_Pos + j) * 256 * 3) + ((X_Pos + t) * 3) + 2] = B;
-						//}
+							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4)] = R;
+							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4) + 1] = G;
+							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4) + 2] = B;
+							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4) + 3] = 0xff;
+						}
 
 						//	sprite zero hit
 						if (!PPU_STATUS.isSpriteZero() && i == 0) {

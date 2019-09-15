@@ -49,6 +49,11 @@ void idROM(unsigned char c[]) {
 				printf("UnROM cartridge!\n");
 				mapper = new UNROM(0x400000, c[4], 0);
 				break;
+			//	MMC3
+			case 4:
+				printf("MMC3 cartridge!\n");
+				mapper = new MMC3(0x400000, c[4], 0);
+				break;
 			default:
 				printf("Unhandled Mapper %d\n", (c[7] & 0xf0) | (c[6] >> 4));
 				break;
