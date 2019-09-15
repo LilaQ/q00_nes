@@ -110,3 +110,4 @@ Debug/blargg_ppu_tests_2005.09.15b/source/vram_access.asm
 Debug/sprite_hit_timing/sprite_hit_timing.asm
 dt.nes.deb
 zelda.nes.deb
+Debug/input.obj

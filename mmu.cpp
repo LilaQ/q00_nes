@@ -111,6 +111,15 @@ uint8_t readFromMem(uint16_t adr) {
 			}
 			return 0x40;
 			break;
+		case 0x4017:		//	CONTROLLER #2
+			if (poll_input >= 0) {
+				uint8_t ret = readController2(poll_input++);
+				if (poll_input > 7)
+					poll_input = -1;	//	disable polling
+				return ret | 0x40;
+			}
+			return 0x40;
+			break;
 		default:
 			return mapper->read(adr);
 			break;
