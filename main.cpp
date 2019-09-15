@@ -24,7 +24,7 @@ using namespace::std;
 //	$4020 - $FFFF	$BFE0	Cartridge space : PRG ROM, PRG RAM, and mapper registers(See Note)
 
 SDL_Event event;					//	Eventhandler for all SDL events
-string filename = "dt.nes";
+string filename = "zelda.nes";
 bool unpaused = true;
 
 int lastcyc = 0;

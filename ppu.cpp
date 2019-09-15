@@ -122,10 +122,8 @@ void writePPUADDR(uint8_t adr) {
 		tmp_PPUSCROLL_y &= 0b11000;
 		tmp_PPUSCROLL_y |= (adr >> 5) & 0b111;
 		
-		//if (ppuScanline >= 1 && ppuScanline <= 239 && tmp_PPUSCROLL_y) {
-			PPUSCROLL_y = tmp_PPUSCROLL_y - (ppuScanline / 8);
-			PPUSCROLL_fine_y = tmp_PPUSCROLL_fine_y;
-		//}
+		PPUSCROLL_y = tmp_PPUSCROLL_y - (ppuScanline / 8);
+		PPUSCROLL_fine_y = tmp_PPUSCROLL_fine_y;
 
 		scr_w = 0;
 	}
@@ -186,8 +184,8 @@ bool NMIinterrupt() {
 }
 
 //	Load cartridge, map CHR-ROM to CHR-RAM (NROM)
-void writeCHRRAM(unsigned char cartridge[], uint16_t offset) {
-	for (int i = 0; i < 0x2000; i++) {
+void writeCHRRAM(unsigned char cartridge[], uint16_t offset, uint16_t size) {
+	for (int i = 0; i < size; i++) {
 		wrV(i, cartridge[offset + i]);
 	}
 }
@@ -528,9 +526,6 @@ void renderScanline(uint16_t row) {
 			tile_nr = rdV(scrolled_address);												//	tile ID at the current address
 			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + ((r+PPUSCROLL_fine_y) % 8);	//	adress of the tile in CHR RAM
 
-			if(r==150 && !col)
-			printf("Using Y-Scroll: %d at NT %d\n", PPUSCROLL_y, nts);
-
 			//	select the correct byte of the attribute table
 			tile_attr_nr = getAttribute(scrolled_address);
 
@@ -554,8 +549,8 @@ void renderScanline(uint16_t row) {
 			Attributes = OAM[i * 4 + 2];
 			X_Pos = OAM[i * 4 + 3];
 			Palette_Offset = 0x3f10 + ((Attributes & 3) * 4);
-			if (r >= Y_Pos && (Y_Pos + 8) > r && Y_Pos) {
-				//	iterate through 8x8 sprite in Pattern Table, with offset of Y_Pos and X_Pos
+			if (r >= Y_Pos && (Y_Pos + (PPU_CTRL.sprite_size + 1) * 8) > r && Y_Pos) {
+				//	iterate through 8x8 or 8x16 sprite in Pattern Table, with offset of Y_Pos and X_Pos
 				int j = r - Y_Pos;
 				for (int t = 0; t < 8; t++) {
 					uint8_t V = 0x00;
@@ -587,9 +582,9 @@ void renderScanline(uint16_t row) {
 						//}
 
 						//	sprite zero hit
-							if (!PPU_STATUS.isSpriteZero() && i == 0) {
-								PPU_STATUS.setSpriteZero();
-							}
+						if (!PPU_STATUS.isSpriteZero() && i == 0) {
+							PPU_STATUS.setSpriteZero();
+						}
 					}
 						
 				}
