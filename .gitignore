@@ -112,3 +112,5 @@ dt.nes.deb
 zelda.nes.deb
 Debug/input.obj
 Debug/input.obj
+Release/input.obj
+Debug/input.obj

@@ -554,10 +554,10 @@ void renderScanline(uint16_t row) {
 			Palette_Offset = 0x3f10 + ((Attributes & 3) * 4);
 			if (r >= Y_Pos && (Y_Pos + (PPU_CTRL.sprite_size + 1) * 8) > r && Y_Pos) {
 				//	iterate through 8x8 or 8x16 sprite in Pattern Table, with offset of Y_Pos and X_Pos
-				int j = r - Y_Pos;
+				int j = (r - Y_Pos) + ((r - Y_Pos) / 8) * 8;
 				for (int t = 0; t < 8; t++) {
 					uint16_t V = 0x00;
-					uint16_t Tile = (PPU_CTRL.sprite_size) ? (Tile_Index_Nr & 1) * 0x1000 | (Tile_Index_Nr ) * 0x10 : PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10;
+					uint16_t Tile = (PPU_CTRL.sprite_size) ? (Tile_Index_Nr & 1) * 0x1000 | (Tile_Index_Nr / 2) * 0x20 : PPU_CTRL.sprite_pattern_table_adr_value + Tile_Index_Nr * 0x10;
 					switch ((Attributes >> 6) & 3) {
 					case 0x00:	//	no flip
 						V = ((rdV(Tile + j) >> (7 - (t % 8))) & 1) + ((rdV(Tile + j + 8) >> (7 - (t % 8))) & 1) * 2;
@@ -578,16 +578,16 @@ void renderScanline(uint16_t row) {
 					uint8_t B = PALETTE[rdV(Palette_Offset + V)] & 0xff;
 
 					if (V) {
-						if (!((Attributes >> 5) & 1) || !fb_bg_alpha[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4)]) {
+						if (!((Attributes >> 5) & 1) || !fb_bg_alpha[((Y_Pos + (j % 8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)]) {
 							//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
-							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4)] = R;
-							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4) + 1] = G;
-							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4) + 2] = B;
-							framebuffer[((Y_Pos + j) * 256 * 4) + ((X_Pos + t) * 4) + 3] = 0xff;
+							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)] = R;
+							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4) + 1] = G;
+							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4) + 2] = B;
+							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4) + 3] = 0xff;
 						}
 
 						//	sprite zero hit
-						if (!PPU_STATUS.isSpriteZero() && i == 0) {
+						if (!PPU_STATUS.isSpriteZero() && i == 0 && fb_bg_alpha[((Y_Pos + (j % 8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)]) {
 							PPU_STATUS.setSpriteZero();
 						}
 					}
