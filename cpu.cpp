@@ -202,7 +202,7 @@ int stepCPU() {
 		//stopNMI();
 	}
 
-	printf("%04x %02x %02x %02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d LastStack:%x\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, getPPUCycles(), getPPUScanlines(), c, SP_);
+	//printf("%04x %02x %02x %02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d LastStack:%x\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, getPPUCycles(), getPPUScanlines(), c, SP_);
 	switch (readFromMem(PC)) {
 		case 0x00: { PC++; status.setBrk(1); return 7; break; }
 		case 0x01: { PC++; return ORA(getIndirectXIndex(PC++, registers.X), 6); break; }

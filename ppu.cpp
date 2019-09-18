@@ -134,6 +134,7 @@ void writePPUADDR(uint8_t adr) {
 
 //	PPUDATA write
 void writePPUDATA(uint8_t data) {
+
 	if (PPUADDR == 0x3f10)
 		wrV(0x3f00, data);
 	if (PPUADDR == 0x3f14)
@@ -497,9 +498,9 @@ uint16_t translateScrolledAddress(uint16_t adr, uint8_t scroll_x, int8_t scroll_
 	if (((scrolled_address & 0xffe0) != (temp_adr & 0xffe0)) || ((x > 128) && ((tile_id % 32) == 0)))		//	check if X-boundary crossed ( AND account for transfer-tile glitch)
 	{
 		if (y_mod) {
-			scrolled_address = adr + scroll_y * 0x20 + (scroll_x / 8);
+			//scrolled_address = adr + scroll_y * 0x20 + (scroll_x / 8);
 		}
-		scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
+		//scrolled_address ^= 0x800;	//	XOR the bit, that changes NTs vertically
 		scrolled_address ^= 0x400;	//	XOR the bit, that changes NTs horizontally
 		x_correct = true;
 	}
