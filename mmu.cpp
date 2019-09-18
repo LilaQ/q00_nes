@@ -11,7 +11,8 @@
 bool pbc = false;
 bool open_ppuaddr = false;
 ROM_TYPE romType;
-int poll_input = -1;
+int poll_input_1 = -1;
+int poll_input_2 = -1;
 VRAM_MIRRORING vramMirroring = VRAM_MIRRORING::NONE;
 
 Mapper *mapper;
@@ -32,6 +33,7 @@ void idROM(unsigned char c[]) {
 		printf("iNES 1.0 Header detected\n");
 		
 		//	mapper ID
+		//	TODO, most mappers here pass a zero, instead of byte 5 for CHR size
 		switch ((c[7] & 0xf0) | (c[6] >> 4))
 		{
 			//	NROM
@@ -52,7 +54,12 @@ void idROM(unsigned char c[]) {
 			//	MMC3
 			case 4:
 				printf("MMC3 cartridge!\n");
-				mapper = new MMC3(0x400000, c[4], 0);
+				mapper = new MMC3(0x400000, c[4], c[5], false);
+				break;
+			//	MMC3 / Mapper 37 (SMB + Tetris + World Cup)
+			case 37:
+				printf("MMC3 cartridge!\n");
+				mapper = new MMC3(0x400000, c[4], c[5], true);
 				break;
 			default:
 				printf("Unhandled Mapper %d\n", (c[7] & 0xf0) | (c[6] >> 4));
@@ -108,19 +115,19 @@ uint8_t readFromMem(uint16_t adr) {
 			return readOAMDATA();
 			break;
 		case 0x4016:		//	CONTROLLER #1
-			if (poll_input >= 0) {
-				uint8_t ret = readController1(poll_input++);
-				if (poll_input > 7)
-					poll_input = -1;	//	disable polling
+			if (poll_input_1 >= 0) {
+				uint8_t ret = readController1(poll_input_1++);
+				if (poll_input_1 > 7)
+					poll_input_1 = -1;	//	disable polling
 				return ret | 0x40;
 			}
 			return 0x40;
 			break;
 		case 0x4017:		//	CONTROLLER #2
-			if (poll_input >= 0) {
-				uint8_t ret = readController2(poll_input++);
-				if (poll_input > 7)
-					poll_input = -1;	//	disable polling
+			if (poll_input_2 >= 0) {
+				uint8_t ret = readController2(poll_input_2++);
+				if (poll_input_2 > 7)
+					poll_input_2 = -1;	//	disable polling
 				return ret | 0x40;
 			}
 			return 0x40;
@@ -159,7 +166,8 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			oamDMAtransfer(val, mapper->memory);
 			break;
 		case 0x4016:		//	enable / disable input polling
-			poll_input = val;
+			poll_input_1 = val;
+			poll_input_2 = val;
 			break;
 		default:
 			mapper->write(adr, val);

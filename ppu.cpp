@@ -185,9 +185,9 @@ bool NMIinterrupt() {
 }
 
 //	Load cartridge, map CHR-ROM to CHR-RAM (NROM)
-void writeCHRRAM(unsigned char cartridge[], uint16_t offset, uint16_t size) {
+void writeCHRRAM(unsigned char cartridge[], uint32_t offset, uint16_t size, uint16_t target_address) {
 	for (int i = 0; i < size; i++) {
-		wrV(i, cartridge[offset + i]);
+		wrV(i + target_address, cartridge[offset + i]);
 	}
 }
 

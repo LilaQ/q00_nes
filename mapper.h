@@ -9,6 +9,7 @@ struct Mapper {
 		memory = new unsigned char[mem_size];
 		romPRG16ks = prg16;
 		romCHR8ks = chr8;
+		printf("PRG banks: %d \tCHR banks: %d\n", romPRG16ks, romCHR8ks);
 	}
 
 	~Mapper() {
@@ -261,29 +262,103 @@ struct MMC3 : Mapper {
 	int PRGid = 0;
 	unsigned char* m = 0;
 
-	MMC3(int mem_size, int prg16, int chr8) : Mapper(mem_size, prg16, chr8) {
+	uint8_t bank_register = 0;
+	uint8_t rom_bank_mode = 0;
+	uint8_t chr_a12_inversion = 0;
 
+	bool is_mapper_37 = false;
+	uint32_t m37_mask = 0x00000;
+
+	bool irq_enabled = true;
+	uint16_t irq_reload_value = 0x0;
+	uint16_t irq_scanline_counter = 0x0;
+
+	int8_t prg_chr_bank[8] = {
+		0, 0, 0, 0, -2, 0, 1, -1
+		// 0, 1, -2, -1
+	};
+
+	MMC3(int mem_size, int prg16, int chr8, bool m37) : Mapper(mem_size, prg16, chr8) {
+		romPRG16ks = prg16 * 2;
+		if (m37) {
+			romPRG16ks /= 4;
+			is_mapper_37 = m37;
+
+		}
 	}
 
 	virtual void loadMem(unsigned char* c) {
+		printf("Loading Mem... PRG (8k): %d, CHR (8k): %d\n", romPRG16ks, romCHR8ks);
 		m = c;
-		//	Switchable first 16k PRG
-		for (int i = 0; i < 0x4000; i++) {
-			memory[0x8000 + i] = c[i + 0x10];
-		}
-		//	Fixed last 16k PRG
-		for (int i = 0; i < 0x4000; i++) {
-			memory[0xc000 + i] = c[i + 0x10 + (romPRG16ks - 1) * 0x4000];
-		}
-		for (int i = 0; i < 0x2000; i++) {
-			//	NROM
-			writeCHRRAM(c, 0x10 + romPRG16ks * 0x4000, 0x2000);
-		}
+		update();
 	}
 
 	virtual void write(uint16_t adr, uint8_t val) {
-		if (adr >= 0x8000 && adr <= 0xffff) {
-			PRGid = val & 0b111;
+
+		//	Registers
+		if (adr >= 0x8000 && adr <= 0x9fff) {
+
+			//	Bank select | even
+			if ((adr % 2) == 0) {
+				bank_register = val & 0b111;
+				rom_bank_mode = (val >> 5) & 1;
+				chr_a12_inversion = (val >> 6) & 0b11;
+				update();
+			}
+
+			//	Bank data | odd
+			else {
+				prg_chr_bank[bank_register] = val;
+				update();
+  				printf("Setting register %d to %x\n", bank_register, val);
+			}
+
+		}
+		else if (adr >= 0x6000 && adr <= 0x7fff) {
+			if (is_mapper_37) {
+				/*
+				0,1,2	$00000-$0FFFF (64kB)	$00000-$1FFFF
+					3	$10000-$1FFFF (64kB)	$00000-$1FFFF
+				4,5,6	$20000-$3FFFF (128kB)	$20000-$3FFFF
+					7	$30000-$3FFFF (64kB)	$20000-$3FFFF*/
+				if ((val & 0b111) <= 2 && (val & 0b111) >= 0) {
+					m37_mask = 0x00000;
+				}
+				else if ((val & 0b111) == 3) {
+					m37_mask = 0x10000;
+				}
+				else if ((val & 0b111) <= 6 && (val & 0b111) >= 4) {
+					m37_mask = 0x20000;
+				}
+				else if ((val & 0b111) == 7) {
+					m37_mask = 0x30000;
+				}
+				printf("Setting outer bank to #%d\n", (val & 0b111));
+				update();
+			}
+			else {
+				memory[adr] = val;
+			}
+		}
+		else if (adr >= 0xc000 && adr <= 0xdfff) {
+			//	set reload value | even
+			if ((adr % 2) == 0) {
+				irq_reload_value = val;
+			}
+			//	actually set reload value to scanline counter | odd
+			else {
+				irq_scanline_counter = irq_reload_value;
+			}
+		}
+		else if (adr >= 0xe000 && adr <= 0xffff) {
+			//	IRQ disable | even
+			if ((adr % 2) == 0) {
+				irq_enabled = false;
+			}
+			//	IRQ enable | odd
+			else {
+				irq_enabled = true;
+			}
 		}
 		else {
 			memory[adr] = val;
@@ -291,11 +366,64 @@ struct MMC3 : Mapper {
 	}
 
 	virtual unsigned char read(uint16_t adr) {
-		if (adr >= 0x8000 && adr <= 0xbfff) {
+		
+		/*if (adr >= 0xe000 && adr <= 0xffff) {
 			return m[(adr % 0x8000) + PRGid * 0x4000 + 0x10];
 		}
 		else {
 			return memory[adr];
+		}*/
+		return memory[adr];
+	}
+
+	void update() {
+
+		/*
+			PRG
+		*/
+
+		uint32_t p0, p1, p2, p3;
+		p0 = ((!rom_bank_mode) ? prg_chr_bank[6] : (romPRG16ks - 2)) * 0x2000;
+		p1 = ((prg_chr_bank[7] >= 0) ? prg_chr_bank[7] : (romPRG16ks + prg_chr_bank[7])) * 0x2000;
+		p2 = ((rom_bank_mode) ? prg_chr_bank[6] : (romPRG16ks - 2)) * 0x2000;
+		p3 = (romPRG16ks - 1) * 0x2000;
+
+		//	CPU $8000 - $9FFF(or $C000 - $DFFF) : 8 KB switchable PRG ROM bank
+		for (int i = 0; i < 0x2000; i++) {
+			memory[0x8000 + i] = m[i + m37_mask + 0x10 + p0];
+		}
+		printf("Setting page 0x8000-0x9fff to ROM address %x with bank id #%d\n", p0, prg_chr_bank[6]);
+		//	CPU $A000-$BFFF: 8 KB switchable PRG ROM bank
+		for (int i = 0; i < 0x2000; i++) {
+			memory[0xa000 + i] = m[i + m37_mask + 0x10 + p1];
+		}
+		//	CPU $C000-$DFFF (or $8000-$9FFF): 8 KB PRG ROM bank, fixed to the second-last bank
+		for (int i = 0; i < 0x2000; i++) {
+			memory[0xc000 + i] = m[i + m37_mask + 0x10 + p2];
+		}
+		//	Fixed last 8k PRG
+		for (int i = 0; i < 0x2000; i++) {
+			memory[0xe000 + i] = m[i + m37_mask + 0x10 + p3];
+		}
+
+		/*
+			CHR
+		*/
+		if (chr_a12_inversion == 0) {
+			writeCHRRAM(m, (0x10 + prg_chr_bank[0] * 0x400 + 0x40000) | m37_mask, 0x0800, 0x0000);	//	R0 to 0x0000 - 0x07ff (2 banks)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[1] * 0x400 + 0x40000) | m37_mask, 0x0800, 0x0800);	//	R1 to 0x0800 - 0x0fff (2 banks)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[2] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1000);	//	R2 to 0x1000 - 0x13ff (1 bank)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[3] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1400);	//	R3 to 0x1400 - 0x17ff (1 bank)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[4] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1800);	//	R4 to 0x1800 - 0x1bff (1 bank)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[5] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1c00);	//	R5 to 0x1c00 - 0x1fff (1 bank)
+		}
+		else {
+			writeCHRRAM(m, (0x10 + prg_chr_bank[2] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0000);	//	R2 to 0x0000 - 0x03ff (1 bank)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[3] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0400);	//	R3 to 0x0400 - 0x07ff (1 bank)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[4] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0800);	//	R4 to 0x0800 - 0x0bff (1 bank)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[5] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0c00);	//	R5 to 0x0c00 - 0x0fff (1 bank)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[0] * 0x400 + 0x40000) | m37_mask, 0x0800, 0x1000);	//	R0 to 0x1000 - 0x17ff (2 banks)
+			writeCHRRAM(m, (0x10 + prg_chr_bank[1] * 0x400 + 0x40000) | m37_mask, 0x0800, 0x1800);	//	R1 to 0x1800 - 0x1fff (2 banks)
 		}
 	}
 
