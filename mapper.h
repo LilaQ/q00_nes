@@ -267,7 +267,7 @@ struct MMC3 : Mapper {
 	uint8_t chr_a12_inversion = 0;
 
 	bool is_mapper_37 = false;
-	uint32_t m37_mask = 0x00000;
+	uint8_t m37_outer_bank = 0x0;
 
 	bool irq_enabled = true;
 	uint16_t irq_reload_value = 0x0;
@@ -281,7 +281,7 @@ struct MMC3 : Mapper {
 	MMC3(int mem_size, int prg16, int chr8, bool m37) : Mapper(mem_size, prg16, chr8) {
 		romPRG16ks = prg16 * 2;
 		if (m37) {
-			romPRG16ks /= 4;
+			//romPRG16ks /= 4;
 			is_mapper_37 = m37;
 
 		}
@@ -304,37 +304,21 @@ struct MMC3 : Mapper {
 				bank_register = val & 0b111;
 				rom_bank_mode = (val >> 6) & 1;
 				chr_a12_inversion = (val >> 7) & 1;
-				update();
+				//update();
 			}
 
 			//	Bank data | odd
 			else {
 				prg_chr_bank[bank_register] = val;
 				update();
-  				//printf("Setting register %d to %d\n", bank_register, val);
+  				printf("Setting register %d to %d\n", bank_register, val);
 			}
 
 		}
 		else if (adr >= 0x6000 && adr <= 0x7fff) {
 			if (is_mapper_37) {
-				/*
-				0,1,2	$00000-$0FFFF (64kB)	$00000-$1FFFF
-					3	$10000-$1FFFF (64kB)	$00000-$1FFFF
-				4,5,6	$20000-$3FFFF (128kB)	$20000-$3FFFF
-					7	$30000-$3FFFF (64kB)	$20000-$3FFFF*/
-				if ((val & 0b111) <= 2 && (val & 0b111) >= 0) {
-					m37_mask = 0x00000;
-				}
-				else if ((val & 0b111) == 3) {
-					m37_mask = 0x10000;
-				}
-				else if ((val & 0b111) <= 6 && (val & 0b111) >= 4) {
-					m37_mask = 0x20000;
-				}
-				else if ((val & 0b111) == 7) {
-					m37_mask = 0x30000;
-				}
-				//printf("Setting outer bank to #%x\n", (val & 0b111));
+				m37_outer_bank = (val & 0b111);
+				printf("Setting outer bank to #%x\n", (val & 0b111));
 				update();
 			}
 			else {
@@ -379,13 +363,33 @@ struct MMC3 : Mapper {
 
 	virtual unsigned char read(uint16_t adr) {
 		
-		/*if (adr >= 0xe000 && adr <= 0xffff) {
-			return m[(adr % 0x8000) + PRGid * 0x4000 + 0x10];
-		}
-		else {
-			return memory[adr];
-		}*/
 		return memory[adr];
+	}
+
+	uint32_t m37_prg(uint32_t p) {
+		//	Mapper 37
+		if (m37_outer_bank <= 2) {
+			p &= 0x07;
+		}
+		else if (m37_outer_bank == 3) {
+			p &= 0x07;
+			p |= 0x08;
+		}
+		else if (m37_outer_bank == 7) {
+			p &= 0x07;
+			p |= 0x20;
+		}
+		else if (m37_outer_bank >= 4) {
+			p &= 0x0f;
+			p |= 0x10;
+		}
+		return p;
+	}
+
+	uint32_t m37_chr(uint32_t p) {
+		if (m37_outer_bank >= 4)
+			p |= 0x80;
+		return p;
 	}
 
 	void update() {
@@ -396,54 +400,118 @@ struct MMC3 : Mapper {
 
 		uint32_t p0, p1, p2, p3;
 		if (rom_bank_mode == 0) {
-			p0 = prg_chr_bank[6] * 0x2000;
-			p1 = prg_chr_bank[7] * 0x2000;
-			p2 = (romPRG16ks - 2) * 0x2000;
-			p3 = (romPRG16ks - 1) * 0x2000;
+			p0 = prg_chr_bank[6];
+			p1 = prg_chr_bank[7];
+			p2 = (romPRG16ks - 2);
+			p3 = (romPRG16ks - 1);
 		}
 		else {
-			p0 = (romPRG16ks - 2) * 0x2000;
-			p1 = prg_chr_bank[7] * 0x2000;
-			p2 = prg_chr_bank[6] * 0x2000;
-			p3 = (romPRG16ks - 1) * 0x2000;
+			p0 = (romPRG16ks - 2);
+			p1 = prg_chr_bank[7];
+			p2 = prg_chr_bank[6];
+			p3 = (romPRG16ks - 1);
 		}
+
+		if (is_mapper_37) {
+			p0 = m37_prg(p0);
+			p1 = m37_prg(p1);
+			p2 = m37_prg(p2);
+			p3 = m37_prg(p3);
+		}
+
+		p0 *= 0x2000;
+		p1 *= 0x2000;
+		p2 *= 0x2000;
+		p3 *= 0x2000;
+
 
 		//	CPU $8000 - $9FFF(or $C000 - $DFFF) : 8 KB switchable PRG ROM bank
 		for (int i = 0; i < 0x2000; i++) {
-			memory[0x8000 + i] = m[i + m37_mask + 0x10 + p0];
+			memory[0x8000 + i] = m[i + 0x10 + p0];
 		}
 		//printf("Setting page 0x8000-0x9fff to ROM address %x with bank id #%d\n", p0, prg_chr_bank[6]);
 		//	CPU $A000-$BFFF: 8 KB switchable PRG ROM bank
 		for (int i = 0; i < 0x2000; i++) {
-			memory[0xa000 + i] = m[i + m37_mask + 0x10 + p1];
+			memory[0xa000 + i] = m[i + 0x10 + p1];
 		}
 		//	CPU $C000-$DFFF (or $8000-$9FFF): 8 KB PRG ROM bank, fixed to the second-last bank
 		for (int i = 0; i < 0x2000; i++) {
-			memory[0xc000 + i] = m[i + m37_mask + 0x10 + p2];
+			memory[0xc000 + i] = m[i + 0x10 + p2];
 		}
 		//	Fixed last 8k PRG
 		for (int i = 0; i < 0x2000; i++) {
-			memory[0xe000 + i] = m[i + m37_mask + 0x10 + p3];
+			memory[0xe000 + i] = m[i + 0x10 + p3];
 		}
 
 		/*
 			CHR
 		*/
+
+		uint32_t c0, c1, c2, c3, c4, c5;
+
 		if (chr_a12_inversion == 0) {
-			writeCHRRAM(m, (0x10 + (prg_chr_bank[0] & 0xffffe) * 0x400 + 0x40000) | m37_mask, 0x0800, 0x0000);	//	R0 to 0x0000 - 0x07ff (2 banks)
-			writeCHRRAM(m, (0x10 + (prg_chr_bank[1] & 0xffffe) * 0x400 + 0x40000) | m37_mask, 0x0800, 0x0800);	//	R1 to 0x0800 - 0x0fff (2 banks)
-			writeCHRRAM(m, (0x10 + prg_chr_bank[2] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1000);	//	R2 to 0x1000 - 0x13ff (1 bank)
-			writeCHRRAM(m, (0x10 + prg_chr_bank[3] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1400);	//	R3 to 0x1400 - 0x17ff (1 bank)
-			writeCHRRAM(m, (0x10 + prg_chr_bank[4] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1800);	//	R4 to 0x1800 - 0x1bff (1 bank)
-			writeCHRRAM(m, (0x10 + prg_chr_bank[5] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x1c00);	//	R5 to 0x1c00 - 0x1fff (1 bank)
+
+			c0 = (prg_chr_bank[0] & 0xffffe);
+			c1 = (prg_chr_bank[1] & 0xffffe);
+			c2 = prg_chr_bank[2];
+			c3 = prg_chr_bank[3];
+			c4 = prg_chr_bank[4];
+			c5 = prg_chr_bank[5];
+
+			if (is_mapper_37) {
+				c0 = m37_chr(c0);
+				c1 = m37_chr(c1);
+				c2 = m37_chr(c2);
+				c3 = m37_chr(c3);
+				c4 = m37_chr(c4);
+				c5 = m37_chr(c5);
+			}
+
+			c0 *= 0x400;
+			c1 *= 0x400;
+			c2 *= 0x400;
+			c3 *= 0x400;
+			c4 *= 0x400;
+			c5 *= 0x400;
+
+			writeCHRRAM(m, (0x10 + c0 + 0x40000), 0x0800, 0x0000);	//	R0 to 0x0000 - 0x07ff (2 banks)
+			writeCHRRAM(m, (0x10 + c1 + 0x40000), 0x0800, 0x0800);	//	R1 to 0x0800 - 0x0fff (2 banks)
+			writeCHRRAM(m, (0x10 + c2 + 0x40000), 0x0400, 0x1000);	//	R2 to 0x1000 - 0x13ff (1 bank)
+			writeCHRRAM(m, (0x10 + c3 + 0x40000), 0x0400, 0x1400);	//	R3 to 0x1400 - 0x17ff (1 bank)
+			writeCHRRAM(m, (0x10 + c4 + 0x40000), 0x0400, 0x1800);	//	R4 to 0x1800 - 0x1bff (1 bank)
+			writeCHRRAM(m, (0x10 + c5 + 0x40000), 0x0400, 0x1c00);	//	R5 to 0x1c00 - 0x1fff (1 bank)
 		}
 		else {
-			writeCHRRAM(m, (0x10 + prg_chr_bank[2] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0000);	//	R2 to 0x0000 - 0x03ff (1 bank)
-			writeCHRRAM(m, (0x10 + prg_chr_bank[3] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0400);	//	R3 to 0x0400 - 0x07ff (1 bank)
-			writeCHRRAM(m, (0x10 + prg_chr_bank[4] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0800);	//	R4 to 0x0800 - 0x0bff (1 bank)
-			writeCHRRAM(m, (0x10 + prg_chr_bank[5] * 0x400 + 0x40000) | m37_mask, 0x0400, 0x0c00);	//	R5 to 0x0c00 - 0x0fff (1 bank)
-			writeCHRRAM(m, (0x10 + (prg_chr_bank[0] & 0xffffe) * 0x400 + 0x40000) | m37_mask, 0x0800, 0x1000);	//	R0 to 0x1000 - 0x17ff (2 banks)
-			writeCHRRAM(m, (0x10 + (prg_chr_bank[1] & 0xffffe) * 0x400 + 0x40000) | m37_mask, 0x0800, 0x1800);	//	R1 to 0x1800 - 0x1fff (2 banks)
+
+			c0 = prg_chr_bank[2];
+			c1 = prg_chr_bank[3];
+			c2 = prg_chr_bank[4];
+			c3 = prg_chr_bank[5];
+			c4 = (prg_chr_bank[0] & 0xffffe);
+			c5 = (prg_chr_bank[1] & 0xffffe);
+
+			if (is_mapper_37) {
+				c0 = m37_chr(c0);
+				c1 = m37_chr(c1);
+				c2 = m37_chr(c2);
+				c3 = m37_chr(c3);
+				c4 = m37_chr(c4);
+				c5 = m37_chr(c5);
+			}
+
+			c0 *= 0x400;
+			c1 *= 0x400;
+			c2 *= 0x400;
+			c3 *= 0x400;
+			c4 *= 0x400;
+			c5 *= 0x400;
+
+			writeCHRRAM(m, (0x10 + c0 + 0x40000), 0x0400, 0x0000);	//	R2 to 0x0000 - 0x03ff (1 bank)
+			writeCHRRAM(m, (0x10 + c1 + 0x40000), 0x0400, 0x0400);	//	R3 to 0x0400 - 0x07ff (1 bank)
+			writeCHRRAM(m, (0x10 + c2 + 0x40000), 0x0400, 0x0800);	//	R4 to 0x0800 - 0x0bff (1 bank)
+			writeCHRRAM(m, (0x10 + c3 + 0x40000), 0x0400, 0x0c00);	//	R5 to 0x0c00 - 0x0fff (1 bank)
+			writeCHRRAM(m, (0x10 + c4 + 0x40000), 0x0800, 0x1000);	//	R0 to 0x1000 - 0x17ff (2 banks)
+			writeCHRRAM(m, (0x10 + c5 + 0x40000), 0x0800, 0x1800);	//	R1 to 0x1800 - 0x1fff (2 banks)
 		}
 	}
 
