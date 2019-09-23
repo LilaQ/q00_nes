@@ -9,11 +9,9 @@ void writePPUDATA(uint8_t data);
 uint8_t readPPUDATA();
 void writePPUCTRL(uint8_t val);
 void writeCHRRAM(unsigned char cartridge[], uint32_t offset, uint16_t size, uint16_t target_address = 0x0000);
-void stopNMI();
 uint8_t readPPUSTATUS();
 void writePPUSCROLL(uint8_t val);
 void writePPUMASK(uint8_t val);
-bool NMIinterrupt();
 void drawCHRTable();
 void drawOAM();
 void drawNameTables();
@@ -21,6 +19,7 @@ void oamDMAtransfer(uint8_t val, unsigned char memory[]);
 void writeOAMADDR(uint8_t val);
 void writeOAMDATA(uint8_t val);
 void initVRAM(VRAM_MIRRORING m);
+void wrV(uint16_t adr, uint8_t val);
 uint8_t readOAMDATA();
 uint16_t getPPUCycles();
 uint16_t getPPUScanlines();
@@ -66,10 +65,10 @@ struct PPUCTRL
 
 struct PPUSTATUS
 {
-	uint8_t value = 0;
+	uint8_t value = 0x20;
 	
 	//	TODO last 5 bits are the last LSB bit stored to VRAM
-	uint8_t sprite_overflow = 0;	//	bit 5
+	uint8_t sprite_overflow = 1;	//	bit 5
 	uint8_t sprite0_hit = 0;		//	bit 6
 	uint8_t vblank = 0;				//	bit 7;
 

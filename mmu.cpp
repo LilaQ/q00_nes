@@ -25,6 +25,14 @@ void reset() {
 	
 }
 
+bool irq() {
+	return mapper->IRQ();
+}
+
+void nextScanline() {
+	mapper->nextScanline();
+}
+
 void idROM(unsigned char c[]) {
 	
 	//	iNES 1.0 - $4E $45 $53 $1A

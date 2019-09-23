@@ -6,6 +6,7 @@
 #include "mmu.h"
 #include "ppu.h"
 #include "wmu.h"
+#include "cpu.h"
 #ifdef _WIN32
 	#include <Windows.h>
 	#include <WinUser.h>
@@ -44,8 +45,6 @@ PPUSTATUS PPU_STATUS;
 PPUMASK PPU_MASK;
 uint16_t PPUADDR = 0x0;
 uint8_t OAMADDR = 0x0;
-bool NMI_occured = false;
-bool NMI_output = false;
 
 void initVRAM(VRAM_MIRRORING m) {
 	for (int i = 0; i < 0x4000; i++) {
@@ -61,7 +60,6 @@ void initVRAM(VRAM_MIRRORING m) {
 			_VRAM[0x2c00 + i] = &pVRAM[0x2400 + i];
 		}
 		break;
-		break;
 	case HORIZONTAL:
 		for (int i = 0; i < 0x400; i++) {
 			_VRAM[0x2000 + i] = &pVRAM[0x2000 + i];
@@ -72,6 +70,13 @@ void initVRAM(VRAM_MIRRORING m) {
 		break;
 	case NONE:
 	default:
+		for (int i = 0; i < 0x400; i++) {
+			_VRAM[0x2000 + i] = &pVRAM[0x2000 + i];
+			_VRAM[0x2800 + i] = &pVRAM[0x2000 + i];
+			_VRAM[0x2400 + i] = &pVRAM[0x2400 + i];
+			_VRAM[0x2c00 + i] = &pVRAM[0x2400 + i];
+		}
+		break;
 		break;
 	}
 }
@@ -95,10 +100,13 @@ uint16_t getPPUScanlines() {
 
 //	PPUCTRL write (2000)
 void writePPUCTRL(uint8_t val) {
-	PPU_CTRL.setValue(val);
-	NMI_output = PPU_CTRL.generate_nmi > 0;
-	PPU_STATUS.appendLSB(val);
-	nts = val & 3;
+	printf("PPUCTRL write at ppuScanline %d and ppuCycles %d, changes NTs to %d \n", ppuScanline, ppuCycles, val & 3);
+	PPU_CTRL.setValue((val & 0xfc) | PPU_CTRL.value & 0b11);
+	//if (PPU_MASK.show_bg || PPU_MASK.show_sprites) {
+		//PPU_CTRL.setValue(val);
+		PPU_STATUS.appendLSB(val);
+		nts = val & 3;
+	//}
 }
 
 //	PPUADDR write (2006)
@@ -114,10 +122,12 @@ void writePPUADDR(uint8_t adr) {
 		tmp_PPUSCROLL_fine_y = (adr >> 12) & 0b111;
 
 		scr_w = 1;
+		printf("First NT part %d (writing value %x)\n", nts, adr);
 	}
 	else {
 		PPUADDR |= adr;
 		PPU_CTRL.setValue((PPU_CTRL.value & 0xfc) | nts);
+		printf("Setting NT to %d (writing value %x)\n", nts, adr);
 
 		//	set temp scroll values (also pass to real values)
 		tmp_PPUSCROLL_y &= 0b11000;
@@ -154,7 +164,7 @@ void writePPUDATA(uint8_t data) {
 	wrV(PPUADDR, data);
 	PPUADDR += PPU_CTRL.ppudata_increment_value;
 
-	PPU_STATUS.appendLSB(data);
+	//PPU_STATUS.appendLSB(data);
 }
 
 //	PPUDATA read
@@ -169,20 +179,9 @@ uint8_t readPPUDATA() {
 uint8_t readPPUSTATUS() {
 	uint8_t ret = PPU_STATUS.value;
 	PPU_STATUS.clearVBlank();
-	NMI_occured = false;
 	PPUADDR += PPU_CTRL.ppudata_increment_value;
 	scr_w = 0;
 	return ret;
-}
-
-//	NMI
-bool NMIinterrupt() {
-	if (NMI_occured && NMI_output) {
-		NMI_occured = false;
-		NMI_output = false;
-		return true;
-	}
-	return false;
 }
 
 //	Load cartridge, map CHR-ROM to CHR-RAM (NROM)
@@ -525,6 +524,11 @@ void renderScanline(uint16_t row) {
 			//	select the correct byte of the attribute table
 			tile_attr_nr = getAttribute(scrolled_address);
 
+			if (row == 80 && col == 0)
+				printf("Row 80 rendered; natural: %x scrolled: %x bna: %x, nts: %d\n", natural_address, scrolled_address, PPU_CTRL.base_nametable_address_value, nts);
+			if (row == 210 && col == 0)
+				printf("Row 210 rendered; natural: %x scrolled: %x bna: %x, nts: %d\n", natural_address, scrolled_address, PPU_CTRL.base_nametable_address_value, nts);
+
 			//	select the part of the byte that we need (2-bits)
 			attr_shift = getAttributeTilePart(scrolled_address);
 			palette_offset = ((tile_attr_nr >> attr_shift) & 0x3) * 4;
@@ -601,26 +605,39 @@ void stepPPU() {
 		ppuCycles -= 341;
 		ppuScanline++;
 	}
-	if (0 <= ppuScanline && ppuScanline <= 239) {		//	drawing
-		if (ppuCycles == 250) {
+	if (ppuScanline >= 0 && ppuScanline <= 239) {		//	drawing
+
+		if (ppuCycles == 50 && ppuScanline == 220) {
+			printf("scanline 220 \n");
+		}
+
+		if (ppuCycles == 230) {
 			renderScanline(ppuScanline);
 		}
+		else if (ppuCycles == 260 && (PPU_MASK.show_bg || PPU_MASK.show_sprites)) {
+			nextScanline();
+		}
+
+		
 	}
 	else if (ppuScanline == 241 && ppuCycles == 1) {	//	VBlank 
-		//printf("VBlanking!\n");
-		drawFrame();
+		
 		PPU_STATUS.setVBlank();
 		if (PPU_CTRL.generate_nmi) {
-			NMI_occured = true;
-			NMI_output = true;
+			setNMI(true);
+			//NMI();
 		}
 	}
 	else if (ppuScanline == 261) {
+		
 		//	VBlank off / pre-render line
 		if (ppuCycles == 1) {
+			drawFrame();
 			PPU_STATUS.clearVBlank();
 			PPU_STATUS.clearSpriteZero();
-			NMI_occured = false;
+		}
+		else if (ppuCycles == 260 && (PPU_MASK.show_bg || PPU_MASK.show_sprites)) {
+			nextScanline();
 		}
 		else if (ppuCycles >= 280 && ppuCycles <= 304) {
 			if (PPU_MASK.show_bg || PPU_MASK.show_sprites) {
@@ -628,12 +645,10 @@ void stepPPU() {
 				PPUSCROLL_fine_y = tmp_PPUSCROLL_fine_y;
 			}
 		}
-		else if(ppuCycles == 340)
+		else if (ppuCycles == 340) {
 			ppuScanline = 0;
+			printf("Starting new frame\n");
+		}
 	}
-}
 
-void stopNMI() {
-	NMI_occured = false;
-	NMI_output = false;
 }

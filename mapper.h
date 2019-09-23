@@ -26,6 +26,8 @@ struct Mapper {
 		memory[adr] = val;
 	}
 	virtual void loadMem(unsigned char* c) = 0;
+	virtual void nextScanline() {};
+	virtual bool IRQ() { return false; };
 };
 
 struct NROM : Mapper {
@@ -44,6 +46,14 @@ struct NROM : Mapper {
 		}
 		for (int i = 0; i < 0x2000; i++) {
 			writeCHRRAM(c, 0x10 + romPRG16ks * 0x4000, 0x2000);
+		}
+	}
+
+	virtual void write(uint16_t adr, uint8_t val) {
+		if (adr <= romPRG16ks * 0x4000 + 0x2000 && adr >= romPRG16ks * 0x4000)
+			wrV(adr - romPRG16ks * 0x4000, val);
+		else {
+			memory[adr] = val;
 		}
 	}
 
@@ -270,8 +280,10 @@ struct MMC3 : Mapper {
 	uint8_t m37_outer_bank = 0x0;
 
 	bool irq_enabled = true;
-	uint16_t irq_reload_value = 0x0;
-	uint16_t irq_scanline_counter = 0x0;
+	bool irq_reload_pending = false;
+	uint16_t irq_latch;
+	uint16_t irq_counter;
+	uint16_t irq_assert;
 
 	uint8_t prg_chr_bank[8] = {
 		0, 0, 0, 0, 0, 0, 0, 1
@@ -285,7 +297,29 @@ struct MMC3 : Mapper {
 			is_mapper_37 = m37;
 
 		}
+		//	TODO
 		initVRAM(VRAM_MIRRORING::HORIZONTAL);
+	}
+
+	virtual void nextScanline() {
+		if (irq_counter == 0 || irq_reload_pending) {
+			irq_counter = irq_latch;
+			irq_reload_pending = false;
+		}
+		else {
+			irq_counter--;
+		}
+
+		if (irq_counter == 0 && irq_enabled) {
+			irq_assert = true;
+		}
+	}
+
+	virtual bool IRQ() {
+		bool isIRQ = irq_assert;
+		irq_assert = false;
+
+		return isIRQ;
 	}
 
 	virtual void loadMem(unsigned char* c) {
@@ -304,21 +338,21 @@ struct MMC3 : Mapper {
 				bank_register = val & 0b111;
 				rom_bank_mode = (val >> 6) & 1;
 				chr_a12_inversion = (val >> 7) & 1;
-				//update();
+				//printf("Selecting bank #0x%x from val 0x%x --- ROM BANK MODE 0x%x \n", bank_register, val, rom_bank_mode);
 			}
 
 			//	Bank data | odd
 			else {
 				prg_chr_bank[bank_register] = val;
+				//printf("Bank select 0x%x to 0x%x\n", bank_register, val);
 				update();
-  				printf("Setting register %d to %d\n", bank_register, val);
 			}
 
 		}
 		else if (adr >= 0x6000 && adr <= 0x7fff) {
 			if (is_mapper_37) {
 				m37_outer_bank = (val & 0b111);
-				printf("Setting outer bank to #%x\n", (val & 0b111));
+				//printf("Outer bank to %d\n", m37_outer_bank);
 				update();
 			}
 			else {
@@ -339,17 +373,19 @@ struct MMC3 : Mapper {
 		else if (adr >= 0xc000 && adr <= 0xdfff) {
 			//	set reload value | even
 			if ((adr % 2) == 0) {
-				irq_reload_value = val;
+				irq_latch = val;
 			}
 			//	actually set reload value to scanline counter | odd
 			else {
-				irq_scanline_counter = irq_reload_value;
+				irq_reload_pending = true;
+				irq_counter = 0;
 			}
 		}
 		else if (adr >= 0xe000 && adr <= 0xffff) {
 			//	IRQ disable | even
 			if ((adr % 2) == 0) {
 				irq_enabled = false;
+				irq_assert = false;
 			}
 			//	IRQ enable | odd
 			else {
@@ -451,8 +487,8 @@ struct MMC3 : Mapper {
 
 		if (chr_a12_inversion == 0) {
 
-			c0 = (prg_chr_bank[0] & 0xffffe);
-			c1 = (prg_chr_bank[1] & 0xffffe);
+			c0 = (prg_chr_bank[0]);
+			c1 = (prg_chr_bank[1]);
 			c2 = prg_chr_bank[2];
 			c3 = prg_chr_bank[3];
 			c4 = prg_chr_bank[4];
@@ -487,8 +523,8 @@ struct MMC3 : Mapper {
 			c1 = prg_chr_bank[3];
 			c2 = prg_chr_bank[4];
 			c3 = prg_chr_bank[5];
-			c4 = (prg_chr_bank[0] & 0xffffe);
-			c5 = (prg_chr_bank[1] & 0xffffe);
+			c4 = (prg_chr_bank[0]);
+			c5 = (prg_chr_bank[1]);
 
 			if (is_mapper_37) {
 				c0 = m37_chr(c0);

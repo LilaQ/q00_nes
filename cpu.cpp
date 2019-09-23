@@ -184,27 +184,61 @@ void resetCPU() {
 	printf("Reset CPU, starting at PC: %x\n", PC);
 }
 
+bool nmi = false;
+
+void setNMI(bool v) {
+	nmi = v;
+}
+
+int NMI() {
+	printf("NMI\n");
+	writeToMem(SP_ + 0x100, PC >> 8);
+	SP_--;
+	writeToMem(SP_ + 0x100, PC & 0xff);
+	SP_--;
+	writeToMem(SP_ + 0x100, status.status | 0x30);
+	SP_--;
+	PC = (readFromMem(0xfffb) << 8) | readFromMem(0xfffa);
+	status.setInterruptDisable(1);
+	return 7;
+}
+
+int IRQorBRK() {
+	printf("IRQ\n");
+	writeToMem(SP_ + 0x100, PC >> 8);
+	SP_--;
+	writeToMem(SP_ + 0x100, PC & 0xff);
+	SP_--;
+	writeToMem(SP_ + 0x100, status.status);
+	SP_--;
+	PC = (readFromMem(0xffff) << 8) | readFromMem(0xfffe);
+	status.setInterruptDisable(1);
+	return 7;
+}
 
 int c = 0;
 int r = 0; //	don't delete, return val holder
 int stepCPU() {
 	c += getLastCyc();
 
-	//	Check for NMI
-	if (NMIinterrupt()) {
-		writeToMem(SP_ + 0x100, PC >> 8); 
-		SP_--;
-		writeToMem(SP_ + 0x100, PC & 0xff);
-		SP_--;
-		writeToMem(SP_ + 0x100, status.status | 0x30);
-		SP_--;
-		PC = (readFromMem(0xfffb) << 8) | readFromMem(0xfffa);
-		//stopNMI();
+	if (nmi) {
+		nmi = false;
+		return NMI();
 	}
 
-	//printf("%04x %02x %02x %02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d LastStack:%x\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, getPPUCycles(), getPPUScanlines(), c, SP_);
+	//	Check for IRQ
+	if (status.interruptDisable == 0) {
+		if (irq()) {
+			return IRQorBRK();
+		}//	Check for NMI
+	}
+
+
+	//if (PC == 0x841d)
+		//printf("HALT!\n");
+	//printf("%04x $%02x $%02x $%02x A:%02x X:%02x Y:%02x P:%02x SP:%02x PPU:%3d,%3d CYC:%d LastStack:%x\n", PC, readFromMem(PC), readFromMem(PC+1), readFromMem(PC+2), registers.A, registers.X, registers.Y, status.status, SP_, getPPUCycles(), getPPUScanlines(), c, SP_);
 	switch (readFromMem(PC)) {
-		case 0x00: { PC++; status.setBrk(1); return 7; break; }
+		case 0x00: { status.setBrk(1); printf("BRK caused :"); return IRQorBRK(); break; }
 		case 0x01: { PC++; return ORA(getIndirectXIndex(PC++, registers.X), 6); break; }
 		case 0x03: { PC++; return SLO(getIndirectXIndex(PC++, registers.X), 8); break; } // SLO inx 2,8
 		case 0x04: { PC+=2; return 3; break; }

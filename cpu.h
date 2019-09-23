@@ -1,5 +1,9 @@
 #pragma once
 #include <stdint.h>
+#include <stdio.h>
+void setIRQ(bool v);
+void setNMI(bool v);
+int NMI();
 
 struct Registers
 {
