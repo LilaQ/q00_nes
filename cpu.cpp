@@ -191,7 +191,7 @@ void setNMI(bool v) {
 }
 
 int NMI() {
-	printf("NMI\n");
+	//printf("NMI\n");
 	writeToMem(SP_ + 0x100, PC >> 8);
 	SP_--;
 	writeToMem(SP_ + 0x100, PC & 0xff);
@@ -204,7 +204,7 @@ int NMI() {
 }
 
 int IRQorBRK() {
-	printf("IRQ\n");
+	//printf("IRQ\n");
 	writeToMem(SP_ + 0x100, PC >> 8);
 	SP_--;
 	writeToMem(SP_ + 0x100, PC & 0xff);

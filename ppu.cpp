@@ -37,7 +37,7 @@ int8_t PPUSCROLL_y;
 uint16_t scr_v, scr_t;
 uint8_t scr_x;
 bool scr_w;
-uint8_t nts = 0;
+uint8_t nts = 0, nts_v = 0;
 
 //	Registers
 PPUCTRL PPU_CTRL;
@@ -100,10 +100,10 @@ uint16_t getPPUScanlines() {
 
 //	PPUCTRL write (2000)
 void writePPUCTRL(uint8_t val) {
-	printf("PPUCTRL write at ppuScanline %d and ppuCycles %d, changes NTs to %d \n", ppuScanline, ppuCycles, val & 3);
-	PPU_CTRL.setValue((val & 0xfc) | PPU_CTRL.value & 0b11);
+	//printf("PPUCTRL write at ppuScanline %d and ppuCycles %d, changes NTs to %d \n", ppuScanline, ppuCycles, val & 3);
+	//PPU_CTRL.setValue((val & 0xfc) | ((PPU_CTRL.value & 0b11) | (val & 0b11)));
 	//if (PPU_MASK.show_bg || PPU_MASK.show_sprites) {
-		//PPU_CTRL.setValue(val);
+		PPU_CTRL.setValue(val);
 		PPU_STATUS.appendLSB(val);
 		nts = val & 3;
 	//}
@@ -122,12 +122,13 @@ void writePPUADDR(uint8_t adr) {
 		tmp_PPUSCROLL_fine_y = (adr >> 12) & 0b111;
 
 		scr_w = 1;
-		printf("First NT part %d (writing value %x)\n", nts, adr);
+		//printf("First NT part %d (writing value %x)\n", nts, adr);
 	}
 	else {
 		PPUADDR |= adr;
 		PPU_CTRL.setValue((PPU_CTRL.value & 0xfc) | nts);
-		printf("Setting NT to %d (writing value %x)\n", nts, adr);
+		nts_v = nts;
+		//printf("Setting NT to %d (writing value %x)\n", nts, adr);
 
 		//	set temp scroll values (also pass to real values)
 		tmp_PPUSCROLL_y &= 0b11000;
@@ -516,6 +517,7 @@ void renderScanline(uint16_t row) {
 	if (PPU_MASK.show_bg) {
 		for (int col = 0; col < 256; col++) {
 			tile_id = (((r+PPUSCROLL_fine_y) / 8) * 32) + ((col + PPUSCROLL_x % 8) / 8);					//	sequential tile number
+			//uint16_t natural_address = (PPU_CTRL.base_nametable_address_value | (nts_v * 0x400 + 0x2000)) + tile_id;
 			uint16_t natural_address = PPU_CTRL.base_nametable_address_value + tile_id;
 			uint16_t scrolled_address = translateScrolledAddress(natural_address, PPUSCROLL_x, PPUSCROLL_y, col, r, tile_id);
 			tile_nr = rdV(scrolled_address);												//	tile ID at the current address
@@ -524,10 +526,10 @@ void renderScanline(uint16_t row) {
 			//	select the correct byte of the attribute table
 			tile_attr_nr = getAttribute(scrolled_address);
 
-			if (row == 80 && col == 0)
+			/*if (row == 80 && col == 0)
 				printf("Row 80 rendered; natural: %x scrolled: %x bna: %x, nts: %d\n", natural_address, scrolled_address, PPU_CTRL.base_nametable_address_value, nts);
 			if (row == 210 && col == 0)
-				printf("Row 210 rendered; natural: %x scrolled: %x bna: %x, nts: %d\n", natural_address, scrolled_address, PPU_CTRL.base_nametable_address_value, nts);
+				printf("Row 210 rendered; natural: %x scrolled: %x bna: %x, nts: %d\n", natural_address, scrolled_address, PPU_CTRL.base_nametable_address_value, nts);*/
 
 			//	select the part of the byte that we need (2-bits)
 			attr_shift = getAttributeTilePart(scrolled_address);
@@ -607,10 +609,6 @@ void stepPPU() {
 	}
 	if (ppuScanline >= 0 && ppuScanline <= 239) {		//	drawing
 
-		if (ppuCycles == 50 && ppuScanline == 220) {
-			printf("scanline 220 \n");
-		}
-
 		if (ppuCycles == 230) {
 			renderScanline(ppuScanline);
 		}
@@ -625,7 +623,6 @@ void stepPPU() {
 		PPU_STATUS.setVBlank();
 		if (PPU_CTRL.generate_nmi) {
 			setNMI(true);
-			//NMI();
 		}
 	}
 	else if (ppuScanline == 261) {
@@ -647,7 +644,6 @@ void stepPPU() {
 		}
 		else if (ppuCycles == 340) {
 			ppuScanline = 0;
-			printf("Starting new frame\n");
 		}
 	}
 
