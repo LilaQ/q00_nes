@@ -175,3 +175,7 @@ mmc3_test_2/source/common/testing.s
 mmc3_test_2/source/common/text_out.s
 mmc3_test_2/source/nes.cfg
 mmc3_test_2/source/readme.txt
+NESEmulator.vcxproj.filters
+NESEmulator.vcxproj
+Release/apu.obj
+Debug/apu.obj

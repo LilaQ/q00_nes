@@ -36,6 +36,9 @@
     <ClCompile Include="input.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="apu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cpu.h">
@@ -58,6 +61,9 @@
     </ClInclude>
     <ClInclude Include="mapper.h">
       <Filter>Source Files\mapper</Filter>
+    </ClInclude>
+    <ClInclude Include="apu.h">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

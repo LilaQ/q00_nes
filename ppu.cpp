@@ -25,6 +25,7 @@ SDL_Window *window, *window_nt, *window_oam;
 SDL_Texture *texture, *texture_nt, *texture_oam;
 unsigned char framebuffer[FB_SIZE];		//	4 bytes per pixel, RGBA24
 bool fb_bg_alpha[256 * 240 * 4];
+bool fb_sp_alpha[256 * 240 * 4];
 unsigned char framebuffer_bg[256 * 240 * 3];	//	3 bytes per pixel, RGB24
 unsigned char framebuffer_chr[256 * 128 * 3];	//	3 bytes per pixel, RGB24 - CHR / Pattern Table
 unsigned char framebuffer_nt[256 * 960 * 3];	//	3 bytes per pixel, RGB24 - Nametables
@@ -38,6 +39,7 @@ uint16_t scr_v, scr_t;
 uint8_t scr_x;
 bool scr_w;
 uint8_t nts = 0, nts_v = 0;
+bool mmc3 = false;
 
 //	Registers
 PPUCTRL PPU_CTRL;
@@ -88,6 +90,10 @@ void wrV(uint16_t adr, uint8_t val) {
 
 uint8_t rdV(uint16_t adr) {
 	return *_VRAM[adr];
+}
+
+void isMMC3(bool v) {
+	mmc3 = v;
 }
 
 //	DEBUG functions
@@ -507,11 +513,13 @@ uint16_t tile_id, tile_nr, adr, tile_attr_nr, attr_shift, palette_offset, Palett
 uint8_t pixel, Y_Pos, Tile_Index_Nr, Attributes, X_Pos;
 void renderScanline(uint16_t row) {
 
+	memset(fb_sp_alpha, false, sizeof(fb_sp_alpha));
+
 	int r = row;
 	if (PPU_MASK.show_bg) {
 		for (int col = 0; col < 256; col++) {
 			tile_id = (((r+PPUSCROLL_fine_y) / 8) * 32) + ((col + PPUSCROLL_x % 8) / 8);					//	sequential tile number
-			uint16_t natural_address = (PPU_CTRL.base_nametable_address_value | (nts_v * 0x400 + 0x2000)) + tile_id;
+			uint16_t natural_address = (mmc3) ? (PPU_CTRL.base_nametable_address | nts_v) * 0x400 + 0x2000 + tile_id : PPU_CTRL.base_nametable_address_value + tile_id;
 			uint16_t scrolled_address = translateScrolledAddress(natural_address, PPUSCROLL_x, PPUSCROLL_y, col, r, tile_id);
 			tile_nr = rdV(scrolled_address);												//	tile ID at the current address
 			adr = PPU_CTRL.background_pattern_table_adr_value + (tile_nr * 0x10) + ((r+PPUSCROLL_fine_y) % 8);	//	adress of the tile in CHR RAM
@@ -535,7 +543,7 @@ void renderScanline(uint16_t row) {
 	}
 
 	if (PPU_MASK.show_sprites) {
-		for (int i = 63; i >= 0; i--) {
+		for (int i = 0; i <= 63; i++) {
 			Y_Pos = OAM[i * 4] + 1;
 			Tile_Index_Nr = OAM[i * 4 + 1];
 			Attributes = OAM[i * 4 + 2];
@@ -555,10 +563,16 @@ void renderScanline(uint16_t row) {
 						V = ((rdV(Tile + j) >> (t % 8)) & 1) + ((rdV(Tile + j + 8) >> (t % 8)) & 1) * 2;
 						break;
 					case 0x02:	//	vertical flip
-						V = ((rdV(Tile + (7 - j)) >> (7 - (t % 8))) & 1) + ((rdV(Tile + (7 - j) + 8) >> (7 - (t % 8))) & 1) * 2;
+						if(PPU_CTRL.sprite_size)
+							V = ((rdV(Tile + (23 - j)) >> (7 - (t % 8))) & 1) + ((rdV(Tile + (23 - j) + 8) >> (7 - (t % 8))) & 1) * 2;
+						else
+							V = ((rdV(Tile + (7 - j)) >> (7 - (t % 8))) & 1) + ((rdV(Tile + (7 - j) + 8) >> (7 - (t % 8))) & 1) * 2;
 						break;
 					case 0x03:	//	horizontal & vertical flip
-						V = ((rdV(Tile + (7 - j)) >> (t % 8)) & 1) + ((rdV(Tile + (7 - j) + 8) >> (t % 8)) & 1) * 2;
+						if (PPU_CTRL.sprite_size)
+							V = ((rdV(Tile + (23 - j)) >> (t % 8)) & 1) + ((rdV(Tile + (23 - j) + 8) >> (t % 8)) & 1) * 2;
+						else
+							V = ((rdV(Tile + (7 - j)) >> (t % 8)) & 1) + ((rdV(Tile + (7 - j) + 8) >> (t % 8)) & 1) * 2;
 						break;
 					}
 
@@ -567,12 +581,17 @@ void renderScanline(uint16_t row) {
 					uint8_t B = PALETTE[rdV(Palette_Offset + V)] & 0xff;
 
 					if (V) {
-						if (!((Attributes >> 5) & 1) || !fb_bg_alpha[((Y_Pos + (j % 8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)]) {
+						if ((!((Attributes >> 5) & 1) || !fb_bg_alpha[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)]) && !fb_sp_alpha[((Y_Pos + (j % 8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)]) {
 							//	when drawing "+1" is needed for the Y-Position, it's a quirk of the N64 because of the prep-scanline
 							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)] = R;
 							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4) + 1] = G;
 							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4) + 2] = B;
 							framebuffer[((Y_Pos + (j%8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4) + 3] = 0xff;
+
+							
+						}
+						else if (((Attributes >> 5) & 1)) {
+							fb_sp_alpha[((Y_Pos + (j % 8) + (j / 16) * 8) * 256 * 4) + ((X_Pos + t) * 4)] = true;
 						}
 
 						//	sprite zero hit
@@ -597,7 +616,7 @@ void stepPPU() {
 	}
 	if (ppuScanline >= 0 && ppuScanline <= 239) {		//	drawing
 
-		if (ppuCycles == 130) {
+		if (ppuCycles == 230) {
 			renderScanline(ppuScanline);
 		}
 		else if (ppuCycles == 260 && (PPU_MASK.show_bg || PPU_MASK.show_sprites)) {

@@ -1,4 +1,5 @@
 #pragma once
+#include "ppu.h"
 #include <stdint.h>
 struct Mapper {
 	unsigned char *memory;
@@ -9,6 +10,7 @@ struct Mapper {
 		memory = new unsigned char[mem_size];
 		romPRG16ks = prg16;
 		romCHR8ks = chr8;
+		isMMC3(false);
 		printf("PRG banks: %d \tCHR banks: %d\n", romPRG16ks, romCHR8ks);
 	}
 
@@ -291,6 +293,7 @@ struct MMC3 : Mapper {
 	};
 
 	MMC3(int mem_size, int prg16, int chr8, bool m37) : Mapper(mem_size, prg16, chr8) {
+		isMMC3(true);
 		romPRG16ks = prg16 * 2;
 		if (m37) {
 			//romPRG16ks /= 4;
@@ -298,7 +301,7 @@ struct MMC3 : Mapper {
 
 		}
 		//	TODO
-		initVRAM(VRAM_MIRRORING::HORIZONTAL);
+		initVRAM(VRAM_MIRRORING::VERTICAL);
 	}
 
 	virtual void nextScanline() {

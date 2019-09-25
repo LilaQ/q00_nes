@@ -20,6 +20,7 @@ void writeOAMADDR(uint8_t val);
 void writeOAMDATA(uint8_t val);
 void initVRAM(VRAM_MIRRORING m);
 void wrV(uint16_t adr, uint8_t val);
+void isMMC3(bool v);
 uint8_t readOAMDATA();
 uint16_t getPPUCycles();
 uint16_t getPPUScanlines();

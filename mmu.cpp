@@ -4,6 +4,7 @@
 #include "cpu.h"
 #include "mmu.h"
 #include "ppu.h"
+#include "apu.h"
 #include "input.h"
 #include "mapper.h"
 #include "main.h"
@@ -169,6 +170,9 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			break;
 		case 0x2007:		//	PPUDATA
 			writePPUDATA(val);
+			break;
+		case 0x4003:		//	RELOAD SC1
+			resetSC1length(val);
 			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, mapper->memory);

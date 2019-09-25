@@ -160,6 +160,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="apu.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="cpu.cpp" />
@@ -168,6 +169,7 @@
     <ClCompile Include="wmu.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="apu.h" />
     <ClInclude Include="cpu.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="mapper.h" />

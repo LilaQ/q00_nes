@@ -3,6 +3,7 @@
 #include "cpu.h"
 #include "ppu.h"
 #include "wmu.h"
+#include "apu.h"
 #include <iostream>
 #include <cstdint>
 #include "SDL2/include/SDL_syswm.h"
@@ -38,6 +39,8 @@ int main()
 
 	initPPU(filename);
 
+	//initAPU();
+
 	resetCPU();
 
 	while (1) {
@@ -48,6 +51,7 @@ int main()
 			while (ppus--) {
 				stepPPU();
 			}
+			stepAPU(lastcyc * 3);
 		}
 
 		handleWindowEvents(event);
