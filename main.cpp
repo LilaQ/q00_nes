@@ -25,7 +25,7 @@ using namespace::std;
 //	$4020 - $FFFF	$BFE0	Cartridge space : PRG ROM, PRG RAM, and mapper registers(See Note)
 
 SDL_Event event;					//	Eventhandler for all SDL events
-string filename = "smb3.nes";
+string filename = "dt.nes";
 bool unpaused = true;
 
 int lastcyc = 0;
@@ -39,7 +39,7 @@ int main()
 
 	initPPU(filename);
 
-	//initAPU();
+	initAPU();
 
 	resetCPU();
 
@@ -51,7 +51,7 @@ int main()
 			while (ppus--) {
 				stepPPU();
 			}
-			stepAPU(lastcyc * 3);
+			stepAPU(lastcyc);
 		}
 
 		handleWindowEvents(event);

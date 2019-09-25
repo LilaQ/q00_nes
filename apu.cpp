@@ -185,9 +185,13 @@ void stepSC1(uint8_t c) {
 
 			//	tick Length Counter & Sweep TODO
 			if (apu_cycles == 7456 || apu_cycles == 14914) {
-				SC1len--;
-				if (SC1len <= 0) {
-					SC1enabled = false;
+				if (!(readFromMem(0x4000) >> 5) & 1) {
+					if (SC1len == 0) {
+						//SC1enabled = false;
+					}
+					else {
+						SC1len--;
+					}
 				}
 			}
 
@@ -232,9 +236,7 @@ void stepSC1(uint8_t c) {
 
 			//	handle timer
 			if (SC1timer <= 0x00) {
-				uint16_t t = (((readFromMem(0x4003) & 7) << 8) | readFromMem(0x4002));
-				SC1timer = 1789773 / (16 * (t + 1));
-				//SC1timer = r;
+				SC1timer = (((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002));
 
 				//	tick duty pointer
 				++SC1dutyIndex %= 8;
@@ -661,10 +663,9 @@ void resetSC1length(uint8_t val) {
 
 	SC1envelope = readFromMem(0x4000) & 0xb1111; // ???
 
-	uint16_t t = (((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002));
-	//f = CPU / (16 * (t + 1))
-	SC1timer = 1789773 / (16 * (t + 1));
-	//SC1timer = r;
+	SC1timer = (((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002));;
+
+	SC1dutyIndex = 0;
 
 	/*//	reset length
 	if (SC1len == 0)
