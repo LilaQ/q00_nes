@@ -172,7 +172,12 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			writePPUDATA(val);
 			break;
 		case 0x4003:		//	RELOAD SC1
+			mapper->write(adr, val);
 			resetSC1length(val);
+			break;
+		case 0x4007:		//	RELOAD SC2
+			mapper->write(adr, val);
+			resetSC2length(val);
 			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, mapper->memory);

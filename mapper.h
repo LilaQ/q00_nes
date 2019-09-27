@@ -297,6 +297,7 @@ struct MMC3 : Mapper {
 		romPRG16ks = prg16 * 2;
 		if (m37) {
 			//romPRG16ks /= 4;
+			isMMC3(false);
 			is_mapper_37 = m37;
 
 		}
