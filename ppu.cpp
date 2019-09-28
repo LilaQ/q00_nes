@@ -270,7 +270,7 @@ void initPPU(string filename) {
 
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
-	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
 	SDL_CreateWindowAndRenderer(256, 240, 0, &window, &renderer);
 	SDL_SetWindowSize(window, 512, 480);
 	//SDL_RenderSetLogicalSize(renderer, 512, 480);

@@ -79,29 +79,15 @@ bool bit_remix = false;
 
 float volume = 0.5;
 
-/*
-	0 0 0 0 0 0 0 1	
-	0 0 0 0 0 0 1 1	
-	0 0 0 0 1 1 1 1	
-	1 1 1 1 1 1 0 0
+int frames_per_sample = 18;		//	TODO: mit diesem Wert kann die Geschwindigkeit der Emulation direkt beeinflusst werden --> UI einbauen
 
-	alternative layout
-*/
-
+//	duty table
 uint8_t duties[4][8] = {
 	{0, 1, 0, 0, 0, 0, 0, 0 },
 	{0, 1, 1, 0, 0, 0, 0, 0 },
 	{0, 1, 1, 1, 1, 0, 0, 0 },
 	{1, 0, 0, 1, 1, 1, 1, 1}
 };
-
-/*uint8_t duties[4][8] = {
-	{0,0,0,0,0,0,0,1},			//	00 (0x0)
-	{0,0,0,0,0,0,1,1},			//	01 (0x1)
-	{0,0,0,0,1,1,1,1},			//	10 (0x2)
-	{1,1,1,1,1,1,0,0}			//	11 (0x3)
-};
-*/
 
 //	length table
 uint16_t length_table[0x20] = {
@@ -191,26 +177,16 @@ void stepSC1(uint8_t c) {
 							SC1envelope = 15;
 						}
 					}
-
-
-					/*if (SC1envelope < 0) {
-						SC1envelope = readFromMem(0x4000) & 0b1111;
-						if (SC1envelope > 0)
-							--SC1envelope;
-						else if ((readFromMem(0x4000) >> 5) & 1) {	//	Reload Envelope loop set 
-							SC1envelope = 15;
-						}
-					}*/
 				}
 			}
 
 			//	tick Length Counter & Sweep TODO
-			/*if (apu_cycles == 7456 || apu_cycles == 14914) {
+			if (apu_cycles == 7456 || apu_cycles == 14914) {
 				//	enabled & halt flag not set
 				if ((readFromMem(0x4015) & 1)) {
 					//	expired
 					if (SC1len == 0) {
-						printf("disable \n");
+						//printf("disable \n");
 						SC1enabled = false;
 					}
 					else {
@@ -220,16 +196,14 @@ void stepSC1(uint8_t c) {
 
 				//	sweep
 				if (readFromMem(0x4001) >> 7) {
-					printf("sweeping\n");
+					//printf("sweeping\n");
 					uint32_t tShadow = SC1timer;
 					tShadow >>= readFromMem(0x4001) & 0b111;
 					if ((readFromMem(0x4001) >> 3) & 1)
 						tShadow = ~tShadow;
 					SC1timer = tShadow;
-					writeToMem(0x4002, SC1timer & 0xff);
-					writeToMem(0x4003, SC1timer >> 8);
 				}
-			}*/
+			}
 
 			//	wrap
 			apu_cycles %= 14914;
@@ -252,7 +226,7 @@ void stepSC1(uint8_t c) {
 				SC1freq = 0;
 
 			if (!--SC1pcc) {
-				SC1pcc = 20;
+				SC1pcc = frames_per_sample;
 				//printf("%d %d %d\n", duty, SC1dutyIndex, SC1freq);
 				//	enabled channel
 				if (SC1enabled) {
@@ -305,26 +279,16 @@ void stepSC2(uint8_t c) {
 							SC2envelope = 15;
 						}
 					}
-
-
-					/*if (SC1envelope < 0) {
-						SC1envelope = readFromMem(0x4000) & 0b1111;
-						if (SC1envelope > 0)
-							--SC1envelope;
-						else if ((readFromMem(0x4000) >> 5) & 1) {	//	Reload Envelope loop set
-							SC1envelope = 15;
-						}
-					}*/
 				}
 			}
 
 			//	tick Length Counter & Sweep TODO
-			/*if (apu_cycles == 7456 || apu_cycles == 14914) {
+			if (apu_cycles == 7456 || apu_cycles == 14914) {
 				//	enabled & halt flag not set
 				if ((readFromMem(0x4015) & 1)) {
 					//	expired
 					if (SC1len == 0) {
-						printf("disable \n");
+						//printf("disable \n");
 						SC1enabled = false;
 					}
 					else {
@@ -334,16 +298,14 @@ void stepSC2(uint8_t c) {
 
 				//	sweep
 				if (readFromMem(0x4001) >> 7) {
-					printf("sweeping\n");
+					//printf("sweeping\n");
 					uint32_t tShadow = SC1timer;
 					tShadow >>= readFromMem(0x4001) & 0b111;
 					if ((readFromMem(0x4001) >> 3) & 1)
 						tShadow = ~tShadow;
 					SC1timer = tShadow;
-					writeToMem(0x4002, SC1timer & 0xff);
-					writeToMem(0x4003, SC1timer >> 8);
 				}
-			}*/
+			}
 
 			//	wrap
 			apu_cycles %= 14914;
@@ -366,8 +328,7 @@ void stepSC2(uint8_t c) {
 				SC2freq = 0;
 
 			if (!--SC2pcc) {
-				SC2pcc = 20;
-				//printf("%d %d %d\n", duty, SC1dutyIndex, SC1freq);
+				SC2pcc = frames_per_sample;
 				//	enabled channel
 				if (SC2enabled) {
 					SC2buf.push_back((float)SC2freq / 100);
@@ -568,9 +529,9 @@ void stepAPU(unsigned char cycles) {
 				res += SC1buf.at(i) * volume;
 			if (useSC1)
 				res += SC1buf.at(i) * volume;
-			if (useSC1)
+			if (useSC2)
 				res += SC2buf.at(i) * volume;
-			if (useSC1)
+			if (useSC2)
 				res += SC2buf.at(i) * volume;
 			/*if (useSC2)
 				res += SC2buf.at(i) * volume;
@@ -590,7 +551,8 @@ void stepAPU(unsigned char cycles) {
 		Mixbuf.clear();
 
 		//TODO: we could, instead of just idling everything until music buffer is drained, at least call stepPPU(0), to have a constant draw cycle, and maybe have a smoother drawing?
-		while (SDL_GetQueuedAudioSize(1) > 4096 * 4) {}
+		while (SDL_GetQueuedAudioSize(1) > 4096 * 4) {
+		}
 	}
 
 }
@@ -635,8 +597,8 @@ void stopSPU() {
 	SC1dutyIndex = 0;
 	SC2dutyIndex = 0;
 	SC3waveIndex = 0;
-	SC1pcc = 40;
-	SC2pcc = 95;
+	SC1pcc = frames_per_sample;
+	SC2pcc = frames_per_sample;
 	SC3pcc = 95;
 	SC4pcc = 95;
 	SC1pcFS = 0;
@@ -684,7 +646,6 @@ void resetSC1length(uint8_t val) {
 
 	SC1len = length_table[val >> 3];
 	printf("Reload SC1len with: %d (from val: %x) ", SC1len, val);
-	//SC1len = val >> 3;
 
 	SC1enabled = true;
 
@@ -698,43 +659,6 @@ void resetSC1length(uint8_t val) {
 
 	SC1dutyIndex = 0;
 
-	/*//	reset length
-	if (SC1len == 0)
-		SC1len = 64 - val;
-
-	//	enable channel
-	SC1enabled = true;
-
-	//	read volume
-	SC1amp = readFromMem(0xff12) >> 4;
-
-	//	reset and enable volume envelope
-	SC1envelope = readFromMem(0xff12) & 7;
-	SC1envelopeEnabled = true;
-
-	//	reload timer 
-	uint16_t r = (((readFromMem(0xff14) & 7) << 8) | readFromMem(0xff13));
-	SC1timer = (2048 - r) * 4;
-
-	//	setting up sweep
-	SC1sweepPeriod = (readFromMem(0xff10) >> 4) & 7;
-	int SC1sweepShift = readFromMem(0xff10) & 7;
-	int SC1sweepNegate = ((readFromMem(0xff10) >> 3) & 1) ? -1 : 1;
-	if (SC1sweepPeriod && SC1sweepShift)	//	this was an OR before. Change if needed
-		SC1sweepEnabled = true;
-	else
-		SC1sweepEnabled = false;
-	SC1sweepShadow = (((readFromMem(0xff14) & 7) << 8) | readFromMem(0xff13));
-	if (SC1sweepShift) {
-		if ((SC1sweepShadow + ((SC1sweepShadow >> SC1sweepShift) * SC1sweepNegate)) > 2047) {
-			SC1sweepEnabled = false;
-			SC1enabled = false;
-		}
-	}
-
-	//	disable channel if dac is off
-	if ((readFromMem(0xff12) >> 3) == 0x0)
-		SC1enabled = false;*/
 }
 
 //	reloads the length counter for SC2, with all the other according settings
@@ -742,7 +666,6 @@ void resetSC2length(uint8_t val) {
 
 	SC2len = length_table[val >> 3];
 	printf("Reload SC2len with: %d (from val: %x) ", SC2len, val);
-	//SC1len = val >> 3;
 
 	SC2enabled = true;
 
@@ -756,16 +679,6 @@ void resetSC2length(uint8_t val) {
 
 	SC2dutyIndex = 0;
 
-	/*if (!SC2len)
-		SC2len = 64 - val;
-	SC2enabled = true;
-	SC2amp = readFromMem(0xff17) >> 4;
-	SC2envelope = readFromMem(0xff17) & 7;
-	SC2envelopeEnabled = true;
-
-	//	disable channel if dac is off
-	if ((readFromMem(0xff17) >> 3) == 0x0)
-		SC2enabled = false;*/
 }
 
 //	reloads the length counter for SC3, with all the other according settings
