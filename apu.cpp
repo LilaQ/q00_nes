@@ -21,7 +21,8 @@ std::vector<float> SC2buf;
 std::vector<float> SC3buf;
 std::vector<float> SC4buf;
 std::vector<float> Mixbuf;
-uint32_t SC1timer = 0x00;
+int16_t SC1timer = 0x00;
+int16_t SC1timerTarget = 0x00;
 uint32_t SC2timer = 0x00;
 uint32_t SC3timer = 0x00;
 uint32_t SC4timer = 0x00;
@@ -48,11 +49,12 @@ uint8_t SC1FrameSeq = 0;
 uint8_t SC2FrameSeq = 8;
 uint8_t SC3FrameSeq = 8;
 uint8_t SC4FrameSeq = 7;
-uint16_t SC1len = 0;
+int16_t SC1len = 0;
 uint8_t SC2len = 0;
 uint8_t SC3len = 0;
 uint8_t SC4len = 0;
 int16_t SC1envelopeDivider = 0;
+int16_t SC1envelopeVol = 0;
 int16_t SC2envelopeDivider = 0;
 bool SC1enabled = false;
 bool SC2enabled = false;
@@ -61,9 +63,10 @@ bool SC4enabled = false;
 bool SC1envelopeStart = false;
 bool SC2envelopeStart = false;
 bool SC4envelopeEnabled = false;
-bool SC1sweepEnabled = false;
-uint8_t SC1sweepPeriod = 0;
+bool SC1sweepReload = false;
+int8_t SC1sweepPeriod = 0;
 uint32_t SC1sweepShadow = 0;
+int16_t SC1sweepDivider = 0;
 int16_t SC1envelope = 0;
 int16_t SC2envelope = 0;
 uint8_t SC4envelope = 0;
@@ -82,11 +85,23 @@ float volume = 0.5;
 int frames_per_sample = 18;		//	TODO: mit diesem Wert kann die Geschwindigkeit der Emulation direkt beeinflusst werden --> UI einbauen
 
 //	duty table
-uint8_t duties[4][8] = {
+/*uint8_t duties[4][8] = {
 	{0, 1, 0, 0, 0, 0, 0, 0 },
 	{0, 1, 1, 0, 0, 0, 0, 0 },
 	{0, 1, 1, 1, 1, 0, 0, 0 },
 	{1, 0, 0, 1, 1, 1, 1, 1}
+};*/
+
+/*0 0 0 0 0 0 0 1	0 1 0 0 0 0 0 0 (12.5%)
+1	0 0 0 0 0 0 1 1	0 1 1 0 0 0 0 0 (25%)
+2	0 0 0 0 1 1 1 1	0 1 1 1 1 0 0 0 (50%)
+3	1 1 1 1 1 1 0 0*/
+
+uint8_t duties[4][8] = {
+	{0, 0, 0, 0, 0, 0, 0, 1 },
+	{0, 0, 0, 0, 0, 0, 1, 1 },
+	{0, 0, 0, 0, 1, 1, 1, 1 },
+	{1, 1, 1, 1, 1, 1, 0, 0 }
 };
 
 //	length table
@@ -159,75 +174,102 @@ void stepSC1(uint8_t c) {
 		if (SC1pcFS % 2 == 0) {
 			apu_cycles++;
 
-			if (apu_cycles == 3728 || apu_cycles == 7456 || apu_cycles == 11185 || apu_cycles == 14914) {
-				//	tick IRQ TODO
+			if (((apu_cycles == 3729 || apu_cycles == 7457 || apu_cycles == 11186 || apu_cycles == 14915) && (readFromMem(0x4017) >> 7)) || 
+			   ((apu_cycles == 3729 || apu_cycles == 7457 || apu_cycles == 11186 || apu_cycles == 18641) && (readFromMem(0x4017) >> 7) == 0)) {
 
-				//	tick Envelope & Linear Counter TOOD
-				if (SC1envelopeStart) {
+				if (!SC1envelopeStart) {
+					SC1envelopeDivider--;
+					if (SC1envelopeDivider < 0) {
+						SC1envelopeDivider = readFromMem(0x4000) & 0b1111;
+						if (SC1envelope > 0) {
+							SC1envelope--;
+							SC1envelopeVol = SC1envelope;
+						}
+						else {
+							SC1envelopeVol = SC1envelope;
+							if (readFromMem(0x4000) & 0b100000) {
+								SC1envelope = 15;
+							}
+						}
+					}
+				} 
+				else {
 					SC1envelopeStart = false;
 					SC1envelope = 15;
 					SC1envelopeDivider = readFromMem(0x4000) & 0b1111;
 				}
-				else {
-					--SC1envelopeDivider;
-					if (SC1envelopeDivider < 0) {
-						SC1envelopeDivider = readFromMem(0x4000) & 0b1111;
-						--SC1envelope;
-						if (SC1envelope < 0) {
-							SC1envelope = 15;
-						}
-					}
-				}
+
 			}
 
-			//	tick Length Counter & Sweep TODO
-			if (apu_cycles == 7456 || apu_cycles == 14914) {
-				//	enabled & halt flag not set
-				if ((readFromMem(0x4015) & 1)) {
-					//	expired
-					if (SC1len == 0) {
-						//printf("disable \n");
-						SC1enabled = false;
+			if (readFromMem(0x4000) & 0b10000) {
+				SC1amp = readFromMem(0x4000) & 0b1111;
+			}
+			else {
+				SC1amp = SC1envelopeVol;
+			}
+
+
+			//	Length Counter & Sweep
+			if (apu_cycles == 7456 || apu_cycles == 14915) {
+
+				//	Length Counter - NOT halted by flag
+				if ((readFromMem(0x4000) & 0b00010000) == 0x00) {
+					//	length > 0
+					if (SC1len) {
+						SC1len--;
 					}
 					else {
-						SC1len--;
+						printf("disable \n");
+						SC1enabled = false;
 					}
 				}
 
-				//	sweep
-				if (readFromMem(0x4001) >> 7) {
-					//printf("sweeping\n");
-					uint32_t tShadow = SC1timer;
-					tShadow >>= readFromMem(0x4001) & 0b111;
-					if ((readFromMem(0x4001) >> 3) & 1)
-						tShadow = ~tShadow;
-					SC1timer = tShadow;
+				//	Sweep
+				if ((readFromMem(0x4001) & 0b10000000)) {
+					SC1sweepDivider--;
+					if (SC1sweepDivider < 0) {
+						printf("Timer pre %d\n", SC1timerTarget);
+						int16_t post = SC1timerTarget >> (readFromMem(0x4001) & 0b111);
+						int8_t neg = (readFromMem(0x4001) & 0b1000) ? -1 : 1;
+						int16_t sum = (uint16_t)(post * neg);
+						SC1timerTarget = SC1timerTarget + sum;
+						//shadowWriteToMem(0x4003, (readFromMem(0x4003) & 0b11111000) | (SC1timer >> 8));
+						//shadowWriteToMem(0x4002, SC1timer & 0xff);
+						/*writeToMem(0x4003, (SC1timer >> 8) & 0b111);
+						writeToMem(0x4002, SC1timer & 0xff);*/
+						printf("Timer Target %d %d %d shift: %d postneg: %d \n", SC1timerTarget, post, neg, readFromMem(0x4001) & 0b111, sum);
+					}
+					if(SC1sweepDivider < 0 || SC1sweepReload) {
+						SC1sweepReload = false;
+						SC1sweepDivider = (readFromMem(0x4001) >> 4) & 0b111;
+					}
 				}
+
 			}
 
 			//	wrap
-			apu_cycles %= 14914;
+			apu_cycles %= 14915;
 
 			//	handle timer
 			if (SC1timer <= 0x00) {
-				SC1timer = ((readFromMem(0x4003) & 0b111) << 8 )| readFromMem(0x4002) & 0x7ff;
+				SC1timer = SC1timerTarget;
 
 				//	tick duty pointer
 				++SC1dutyIndex %= 8;
 			}
-			else
+			else {
 				SC1timer--;
+			}
 
 			//	handle duty
 			int duty = readFromMem(0x4000) >> 6;
 			if (duties[duty][SC1dutyIndex] == 1)
-				SC1freq = ((readFromMem(0x4000) >> 4) & 1) ? readFromMem(0x4000) & 0b1111 : SC1envelope;	//	Constant Volume flag set, or volume dictated by volume envelope
+				SC1freq = SC1amp;
 			else
 				SC1freq = 0;
 
 			if (!--SC1pcc) {
 				SC1pcc = frames_per_sample;
-				//printf("%d %d %d\n", duty, SC1dutyIndex, SC1freq);
 				//	enabled channel
 				if (SC1enabled) {
 					SC1buf.push_back((float)SC1freq / 100);
@@ -248,269 +290,17 @@ void stepSC1(uint8_t c) {
 //	Square2 channel
 void stepSC2(uint8_t c) {
 
-	while (c--) {
-
-		//	Frame Sequencer (every other CPU tick = 1 APU tick)
-		/*	mode 0:     mode 1 :	 function
-			-------- -  ---------- - ---------------------------- -
-			- - - f		- - - - -	 IRQ(if bit 6 is clear)
-			- l - l		- l - - l    Length counter and sweep
-			e e e e     e e e - e    Envelope and linear counter
-		*/
-		SC2pcFS++;
-		if (SC2pcFS % 2 == 0) {
-			apu_cycles++;
-
-			if (apu_cycles == 3728 || apu_cycles == 7456 || apu_cycles == 11185 || apu_cycles == 14914) {
-				//	tick IRQ TODO
-
-				//	tick Envelope & Linear Counter TOOD
-				if (SC2envelopeStart) {
-					SC2envelopeStart = false;
-					SC2envelope = 15;
-					SC2envelopeDivider = readFromMem(0x4004) & 0b1111;
-				}
-				else {
-					--SC2envelopeDivider;
-					if (SC2envelopeDivider < 0) {
-						SC2envelopeDivider = readFromMem(0x4004) & 0b1111;
-						--SC2envelope;
-						if (SC2envelope < 0) {
-							SC2envelope = 15;
-						}
-					}
-				}
-			}
-
-			//	tick Length Counter & Sweep TODO
-			if (apu_cycles == 7456 || apu_cycles == 14914) {
-				//	enabled & halt flag not set
-				if ((readFromMem(0x4015) & 1)) {
-					//	expired
-					if (SC1len == 0) {
-						//printf("disable \n");
-						SC1enabled = false;
-					}
-					else {
-						SC1len--;
-					}
-				}
-
-				//	sweep
-				if (readFromMem(0x4001) >> 7) {
-					//printf("sweeping\n");
-					uint32_t tShadow = SC1timer;
-					tShadow >>= readFromMem(0x4001) & 0b111;
-					if ((readFromMem(0x4001) >> 3) & 1)
-						tShadow = ~tShadow;
-					SC1timer = tShadow;
-				}
-			}
-
-			//	wrap
-			apu_cycles %= 14914;
-
-			//	handle timer
-			if (SC2timer <= 0x00) {
-				SC2timer = ((readFromMem(0x4007) & 0b111) << 8) | readFromMem(0x4006) & 0x7ff;
-
-				//	tick duty pointer
-				++SC2dutyIndex %= 8;
-			}
-			else
-				SC2timer--;
-
-			//	handle duty
-			int duty = readFromMem(0x4004) >> 6;
-			if (duties[duty][SC2dutyIndex] == 1)
-				SC2freq = ((readFromMem(0x4004) >> 4) & 1) ? readFromMem(0x4004) & 0b1111 : SC2envelope;	//	Constant Volume flag set, or volume dictated by volume envelope
-			else
-				SC2freq = 0;
-
-			if (!--SC2pcc) {
-				SC2pcc = frames_per_sample;
-				//	enabled channel
-				if (SC2enabled) {
-					SC2buf.push_back((float)SC2freq / 100);
-					SC2buf.push_back((float)SC2freq / 100);
-				}
-				//	disabled channel
-				else {
-					SC2buf.push_back(0);
-					SC2buf.push_back(0);
-				}
-			}
-
-		}
-	}
 
 }
 
 //	WAVE channel
 void stepSC3(uint8_t c) {
 
-	while (c--) {
-		//	reset frequency (more of a timer) if it hits zero to : (2048 - freq) * 2
-		if (SC3timer <= 0x00) {
-			uint16_t r = (((readFromMem(0xff1e) & 7) << 8) | readFromMem(0xff1d));
-			SC3timer = (2048 - r) * 2;
-
-			//	tick duty pointer
-			++SC3waveIndex %= 32;
-		}
-		else
-			SC3timer--;
-
-		if (!--SC3pcc) {
-			SC3pcc = 95;
-			//	enabled channel
-			if (SC3enabled) {
-				if (!bit_remix) {
-					uint8_t wave = readFromMem(0xff30 + (SC3waveIndex / 2));
-					if (SC3waveIndex % 2) {
-						wave = wave & 0xf;
-					}
-					else {
-						wave = wave >> 4;
-					}
-
-					uint8_t vol = (readFromMem(0xff1c) >> 5) & 3;
-					if (vol)
-						wave = wave >> (vol - 1);
-					else
-						wave = wave >> 4;
-
-					//	if dac is enabled, output actual wave
-					if (readFromMem(0xff1a) >> 7 && (readFromMem(0xff25) & 0x44)) {
-						SC3buf.push_back((float)wave / 100);
-						SC3buf.push_back((float)wave / 100);
-					}
-					else {
-						SC3buf.push_back(0);
-						SC3buf.push_back(0);
-					}
-				}
-				else {
-					int8_t wave = readFromMem(0xff30 + (SC3waveIndex / 2));
-					if (SC3waveIndex % 2) {
-						wave = wave & 0xf;
-					}
-					else {
-						wave = wave >> 4;
-					}
-
-					uint8_t vol = (readFromMem(0xff1c) >> 5) & 3;
-					if (vol)
-						wave = wave >> (vol - 1);
-					else
-						wave = wave >> 4;
-
-					//	if dac is enabled, output actual wave
-					if (readFromMem(0xff1a) >> 7 && (readFromMem(0xff25) & 0x44)) {
-						SC3buf.push_back((float)wave / 100);
-						SC3buf.push_back((float)wave / 100);
-					}
-					else {
-						SC3buf.push_back(0);
-						SC3buf.push_back(0);
-					}
-				}
-			}
-			//	disabled channel
-			else {
-				SC3buf.push_back(0);
-				SC3buf.push_back(0);
-			}
-		}
-
-		//	handle frame sequencer, which ticks length, envelope and sweep
-		SC3pcFS++;
-		if (SC3pcFS == 8192) {
-			SC3pcFS = 0;
-			++SC3FrameSeq %= 8;
-
-			//	handle length
-			if (SC3FrameSeq % 2 == 0 && ((readFromMem(0xff1e) >> 6) & 1) && SC3len) {
-				SC3len--;
-				if (SC3len == 0) {
-					SC3enabled = false;
-				}
-			}
-		}
-
-	}
 }
 
 //	Noise channel
 void stepSC4(uint8_t c) {
 
-	while (c--) {
-
-		//	handle frame sequencer, which ticks length, envelope and sweep
-		SC4pcFS++;
-		if (SC4pcFS == 8192) {
-			SC4pcFS = 0;
-			++SC4FrameSeq %= 8;
-
-			//	handle length
-			if (SC4FrameSeq % 2 == 0 && ((readFromMem(0xff23) >> 6) & 1) && SC4len) {
-				SC4len--;
-				if (SC4len == 0) {
-					SC4enabled = false;
-				}
-			}
-
-			//	handle envelope (volume envelope)
-			if (SC4FrameSeq == 7) {
-				//	tick envelope down
-				--SC4envelope;
-				//	when the envelope is done ticking to zero, it's time to trigger it's purpose
-				if (SC4envelope <= 0) {
-					//	reload envelope tick count
-					SC4envelope = readFromMem(0xff21) & 7;
-					/*if (SC4envelope == 0)
-						SC4envelope = 8;*/
-					if ((readFromMem(0xff21) & 7) != 0) {
-						//	calc new frequence (+1 / -1)
-						int8_t newamp = SC4amp + (((readFromMem(0xff21) >> 3) & 1) ? 1 : -1);
-						//	the new volume needs to be inside 0-15 range
-						if (newamp >= 0 && newamp <= 15)
-							SC4amp = newamp;
-					}
-				}
-			}
-		}
-
-		if (SC4timer <= 0x00) {
-			SC4timer = SC4divisor[readFromMem(0xff22) & 7] << (readFromMem(0xff22) >> 4);
-
-			//	handle lfsr
-			uint8_t xor_res = (SC4lfsr & 0x1) ^ ((SC4lfsr & 0x2) >> 1);
-			SC4lfsr >>= 1;
-			SC4lfsr |= (xor_res << 14);
-			if ((readFromMem(0xff22) >> 3) & 0x1) {
-				SC4lfsr |= (xor_res << 6);
-				SC4lfsr &= 0x7f;
-			}
-		}
-		else
-			SC4timer--;
-
-		if (!--SC4pcc) {
-			SC4pcc = 95;
-			//	enabled channel
-			if (SC4enabled && ((readFromMem(0xff26) >> 3) & 1) && (readFromMem(0xff21) & 0xf8) && (readFromMem(0xff25) & 0x88)) {
-				//	push data to buffer
-				SC4buf.push_back((SC4lfsr & 0x1) ? 0 : (float)SC4amp / 100);
-				SC4buf.push_back((SC4lfsr & 0x1) ? 0 : (float)SC4amp / 100);
-			}
-			//	disabled channel
-			else {
-				SC4buf.push_back(0);
-				SC4buf.push_back(0);
-			}
-		}
-	}
 
 }
 
@@ -529,10 +319,10 @@ void stepAPU(unsigned char cycles) {
 				res += SC1buf.at(i) * volume;
 			if (useSC1)
 				res += SC1buf.at(i) * volume;
-			if (useSC2)
-				res += SC2buf.at(i) * volume;
-			if (useSC2)
-				res += SC2buf.at(i) * volume;
+			if (useSC1)
+				res += SC1buf.at(i) * volume;
+			if (useSC1)
+				res += SC1buf.at(i) * volume;
 			/*if (useSC2)
 				res += SC2buf.at(i) * volume;
 			if (useSC3)
@@ -599,8 +389,8 @@ void stopSPU() {
 	SC3waveIndex = 0;
 	SC1pcc = frames_per_sample;
 	SC2pcc = frames_per_sample;
-	SC3pcc = 95;
-	SC4pcc = 95;
+	SC3pcc = frames_per_sample;
+	SC4pcc = frames_per_sample;
 	SC1pcFS = 0;
 	SC2pcFS = 0;
 	SC3pcFS = 0;
@@ -620,7 +410,7 @@ void stopSPU() {
 	SC1envelopeStart = false;
 	SC2envelopeStart = false;
 	SC4envelopeEnabled = false;
-	SC1sweepEnabled = false;
+	SC1sweepReload = false;
 	SC1sweepPeriod = 0;
 	SC1sweepShadow = 0;
 	SC1envelope = 0;
@@ -645,27 +435,41 @@ Square 1's sweep does several things (see frequency sweep).
 void resetSC1length(uint8_t val) {
 
 	SC1len = length_table[val >> 3];
-	printf("Reload SC1len with: %d (from val: %x) ", SC1len, val);
-
 	SC1enabled = true;
-
-	SC1amp = readFromMem(0x4000) & 0b1111;
-
-	SC1envelope = readFromMem(0x4000) & 0xb1111; // ???
-	SC1envelopeStart = true;
-
-	SC1timer = ((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002);
-	printf("Timer: %d -> from 0x4003: 0x%02x and 0x4002: 0x%02x\n", SC1timer, readFromMem(0x4003), readFromMem(0x4002));
-
+	SC1timerTarget = ((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002);
 	SC1dutyIndex = 0;
 
+}
+
+void resetSC1Envelope() {
+	SC1envelopeStart = true;
+	printf("ENV RELOAD FUNC\n");
+}
+
+void resetSC1Sweep() {
+	SC1sweepReload = true;
+	//	setting up sweep
+	/*SC1sweepPeriod = ((readFromMem(0x4001) >> 4) & 7) + 1;
+	int SC1sweepShift = readFromMem(0x4001) & 7;
+	int SC1sweepNegate = ((readFromMem(0x4001) >> 3) & 1) ? -1 : 1;
+	if (SC1sweepPeriod && SC1sweepShift)	//	this was an OR before. Change if needed
+		SC1sweepReload = true;
+	else
+		SC1sweepReload = false;
+	SC1sweepShadow = (((readFromMem(0x4003) & 7) << 8) | readFromMem(0x4002));
+	if (SC1sweepShift) {
+		if ((SC1sweepShadow + ((SC1sweepShadow >> SC1sweepShift) * SC1sweepNegate)) > 2047) {
+			SC1sweepReload = false;
+			SC1enabled = false;
+		}
+	}*/
 }
 
 //	reloads the length counter for SC2, with all the other according settings
 void resetSC2length(uint8_t val) {
 
 	SC2len = length_table[val >> 3];
-	printf("Reload SC2len with: %d (from val: %x) ", SC2len, val);
+	//printf("Reload SC2len with: %d (from val: %x) ", SC2len, val);
 
 	SC2enabled = true;
 
@@ -675,10 +479,14 @@ void resetSC2length(uint8_t val) {
 	SC2envelopeStart = true;
 
 	SC2timer = ((readFromMem(0x4007) & 0b111) << 8) | readFromMem(0x4006);
-	printf("Timer (SC2): %d -> from 0x4003: 0x%02x and 0x4002: 0x%02x\n", SC2timer, readFromMem(0x4007), readFromMem(0x4006));
+	//printf("Timer (SC2): %d -> from 0x4003: 0x%02x and 0x4002: 0x%02x\n", SC2timer, readFromMem(0x4007), readFromMem(0x4006));
 
 	SC2dutyIndex = 0;
 
+}
+
+void resetSC2Envelope() {
+	SC2envelopeStart = true;
 }
 
 //	reloads the length counter for SC3, with all the other according settings

@@ -171,9 +171,14 @@ void writeToMem(uint16_t adr, uint8_t val) {
 		case 0x2007:		//	PPUDATA
 			writePPUDATA(val);
 			break;
-		case 0x4003:		//	RELOAD SC1
+		case 0x4001:		//	SC1 SWEEP
+			mapper->write(adr, val);
+			resetSC1Sweep();
+			break;
+		case 0x4003:		//	SC1 LENGTH, SC1 ENVELOPE
 			mapper->write(adr, val);
 			resetSC1length(val);
+			resetSC1Envelope();
 			break;
 		case 0x4007:		//	RELOAD SC2
 			mapper->write(adr, val);
@@ -191,6 +196,10 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			break;
 	}
 	
+}
+
+void shadowWriteToMem(uint16_t adr, uint8_t val) {
+	mapper->write(adr, val);
 }
 
 bool pageBoundaryCrossed() {

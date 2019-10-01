@@ -263,3 +263,11 @@ test_apu_timers/square_pitch_bad.wav
 test_apu_timers/triangle_pitch.asm
 test_apu_timers/triangle_pitch.wav
 test_apu_timers/triangle_pitch_bad.wav
+Debug/input.obj
+Release/input.obj
+test_10.asm
+test_10.lst
+test_11.asm
+test_11.lst
+test_9.asm
+test_9.lst

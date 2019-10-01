@@ -17,6 +17,7 @@ uint16_t getAbsolute(uint16_t adr);
 uint16_t getAbsoluteXIndex(uint16_t adr, uint8_t X);
 uint16_t getAbsoluteYIndex(uint16_t adr, uint8_t Y);
 void writeToMem(uint16_t adr, uint8_t val);
+void shadowWriteToMem(uint16_t adr, uint8_t val);
 bool pageBoundaryCrossed();
 void nextScanline();
 bool irq();
