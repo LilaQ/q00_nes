@@ -7,3 +7,6 @@ void resetSC2length(uint8_t val);
 void resetSC1Envelope();
 void resetSC2Envelope();
 void resetSC1Sweep();
+void resetSC2Sweep();
+void resetSC1hi();
+void resetSC2hi();

@@ -175,14 +175,27 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			mapper->write(adr, val);
 			resetSC1Sweep();
 			break;
+		case 0x4002:
+			mapper->write(adr, val);
+			resetSC1hi();
+			break;
 		case 0x4003:		//	SC1 LENGTH, SC1 ENVELOPE
 			mapper->write(adr, val);
 			resetSC1length(val);
 			resetSC1Envelope();
 			break;
-		case 0x4007:		//	RELOAD SC2
+		case 0x4005:		//	SC2 SWEEP
+			mapper->write(adr, val);
+			resetSC2Sweep();
+			break;
+		case 0x4006:
+			mapper->write(adr, val);
+			resetSC2hi();
+			break;
+		case 0x4007:		//	SC2 LENGTH, SC2 ENVELOPE
 			mapper->write(adr, val);
 			resetSC2length(val);
+			resetSC2Envelope();
 			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, mapper->memory);
