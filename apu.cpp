@@ -219,7 +219,6 @@ void stepSC1(uint8_t c) {
 						SC1len--;
 					}
 					else {
-						printf("disable \n");
 						SC1enabled = false;
 					}
 				}
@@ -228,16 +227,10 @@ void stepSC1(uint8_t c) {
 				if ((readFromMem(0x4001) & 0b10000000)) {
 					SC1sweepDivider--;
 					if (SC1sweepDivider < 0) {
-						printf("Timer pre %d\n", SC1timerTarget);
 						int16_t post = SC1timerTarget >> (readFromMem(0x4001) & 0b111);
 						int8_t neg = (readFromMem(0x4001) & 0b1000) ? -1 : 1;
 						int16_t sum = (uint16_t)(post * neg);
 						SC1timerTarget = SC1timerTarget + sum;
-						//shadowWriteToMem(0x4003, (readFromMem(0x4003) & 0b11111000) | (SC1timer >> 8));
-						//shadowWriteToMem(0x4002, SC1timer & 0xff);
-						/*writeToMem(0x4003, (SC1timer >> 8) & 0b111);
-						writeToMem(0x4002, SC1timer & 0xff);*/
-						printf("Timer Target %d %d %d shift: %d postneg: %d \n", SC1timerTarget, post, neg, readFromMem(0x4001) & 0b111, sum);
 					}
 					if(SC1sweepDivider < 0 || SC1sweepReload) {
 						SC1sweepReload = false;
@@ -433,36 +426,18 @@ Noise channel's LFSR bits are all set to 1.
 Square 1's sweep does several things (see frequency sweep).
 */
 void resetSC1length(uint8_t val) {
-
 	SC1len = length_table[val >> 3];
 	SC1enabled = true;
 	SC1timerTarget = ((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002);
 	SC1dutyIndex = 0;
-
 }
 
 void resetSC1Envelope() {
 	SC1envelopeStart = true;
-	printf("ENV RELOAD FUNC\n");
 }
 
 void resetSC1Sweep() {
 	SC1sweepReload = true;
-	//	setting up sweep
-	/*SC1sweepPeriod = ((readFromMem(0x4001) >> 4) & 7) + 1;
-	int SC1sweepShift = readFromMem(0x4001) & 7;
-	int SC1sweepNegate = ((readFromMem(0x4001) >> 3) & 1) ? -1 : 1;
-	if (SC1sweepPeriod && SC1sweepShift)	//	this was an OR before. Change if needed
-		SC1sweepReload = true;
-	else
-		SC1sweepReload = false;
-	SC1sweepShadow = (((readFromMem(0x4003) & 7) << 8) | readFromMem(0x4002));
-	if (SC1sweepShift) {
-		if ((SC1sweepShadow + ((SC1sweepShadow >> SC1sweepShift) * SC1sweepNegate)) > 2047) {
-			SC1sweepReload = false;
-			SC1enabled = false;
-		}
-	}*/
 }
 
 //	reloads the length counter for SC2, with all the other according settings
