@@ -197,6 +197,18 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			resetSC2length(val);
 			resetSC2Envelope();
 			break;
+		case 0x4008:		//	SC3 LINEAR RELOAD
+			mapper->write(adr, val);
+			resetSC3linearReload();
+			break;
+		case 0x400a:		//	SC3 LENGTH HI-BITS
+			mapper->write(adr, val);
+			resetSC3hi();
+			break;
+		case 0x400b:		//	SC3 LENGTH
+			mapper->write(adr, val);
+			resetSC3length(val);
+			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, mapper->memory);
 			break;

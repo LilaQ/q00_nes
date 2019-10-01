@@ -25,7 +25,8 @@ int16_t SC1timer = 0x00;
 int16_t SC1timerTarget = 0x00;
 int16_t SC2timer = 0x00;
 int16_t SC2timerTarget = 0x00;
-uint32_t SC3timer = 0x00;
+int16_t SC3timer = 0x00;
+int16_t SC3timerTarget = 0x00;
 uint32_t SC4timer = 0x00;
 int16_t SC1amp = 0;
 int16_t SC2amp = 0;
@@ -37,7 +38,7 @@ int16_t SC3freq = 0;
 int16_t SC4freq = 0;
 uint8_t SC1dutyIndex = 0;
 uint8_t SC2dutyIndex = 0;
-uint8_t SC3waveIndex = 0;
+uint8_t SC3ampIndex = 0;
 uint8_t SC1pcc = 95;
 uint8_t SC2pcc = 95;
 uint8_t SC3pcc = 95;
@@ -78,7 +79,14 @@ int16_t SC2envelope = 0;
 uint8_t SC4envelope = 0;
 uint8_t SC4divisor[8] = { 8, 16, 32, 48, 64, 80, 96, 112 };
 uint16_t SC4lfsr = 0;
-uint16_t apu_cycles = 0;
+uint16_t SC3linearCounter = 0;
+uint16_t SC3linearReloadValue = 0;
+bool SC3linearReload = false;
+bool SC3controlFlag = false;
+uint16_t apu_cycles_sc1 = 0;
+uint16_t apu_cycles_sc2 = 0;
+uint16_t apu_cycles_sc3 = 0;
+uint16_t apu_cycles_sc4 = 0;
 
 bool useSC1 = true;
 bool useSC2 = true;
@@ -104,6 +112,8 @@ uint8_t duties[4][8] = {
 	{0, 0, 0, 0, 1, 1, 1, 1 },
 	{1, 1, 1, 1, 1, 1, 0, 0 }
 };
+
+uint8_t SC3triangleAmps[32] = { 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 //	length table
 uint16_t length_table[0x20] = {
@@ -173,10 +183,10 @@ void stepSC1(uint8_t c) {
 		*/
 		SC1pcFS++;
 		if (SC1pcFS % 2 == 0) {
-			apu_cycles++;
+			apu_cycles_sc1++;
 
-			if (((apu_cycles == 3729 || apu_cycles == 7457 || apu_cycles == 11186 || apu_cycles == 14915) && (readFromMem(0x4017) >> 7)) || 
-			   ((apu_cycles == 3729 || apu_cycles == 7457 || apu_cycles == 11186 || apu_cycles == 18641) && (readFromMem(0x4017) >> 7) == 0)) {
+			if (((apu_cycles_sc1 == 3729 || apu_cycles_sc1 == 7457 || apu_cycles_sc1 == 11186 || apu_cycles_sc1 == 14915) && (readFromMem(0x4017) >> 7)) ||
+			   ((apu_cycles_sc1 == 3729 || apu_cycles_sc1 == 7457 || apu_cycles_sc1 == 11186 || apu_cycles_sc1 == 18641) && (readFromMem(0x4017) >> 7) == 0)) {
 
 				if (!SC1envelopeStart) {
 					SC1envelopeDivider--;
@@ -209,7 +219,7 @@ void stepSC1(uint8_t c) {
 			}
 
 			//	Length Counter & Sweep
-			if (apu_cycles == 7456 || apu_cycles == 14915) {
+			if (apu_cycles_sc1 == 7456 || apu_cycles_sc1 == 14915) {
 
 				//	Length Counter - NOT halted by flag
 				if ((readFromMem(0x4000) & 0b00010000) == 0x00) {
@@ -242,7 +252,7 @@ void stepSC1(uint8_t c) {
 			}
 
 			//	wrap
-			apu_cycles %= 14915;
+			apu_cycles_sc1 %= 14915;
 
 			//	handle timer
 			if (SC1timer <= 0x00) {
@@ -295,10 +305,10 @@ void stepSC2(uint8_t c) {
 		*/
 		SC2pcFS++;
 		if (SC2pcFS % 2 == 0) {
-			apu_cycles++;
+			apu_cycles_sc2++;
 
-			if (((apu_cycles == 3729 || apu_cycles == 7457 || apu_cycles == 11186 || apu_cycles == 14915) && (readFromMem(0x4017) >> 7)) ||
-				((apu_cycles == 3729 || apu_cycles == 7457 || apu_cycles == 11186 || apu_cycles == 18641) && (readFromMem(0x4017) >> 7) == 0)) {
+			if (((apu_cycles_sc2 == 3729 || apu_cycles_sc2 == 7457 || apu_cycles_sc2 == 11186 || apu_cycles_sc2 == 14915) && (readFromMem(0x4017) >> 7)) ||
+				((apu_cycles_sc2 == 3729 || apu_cycles_sc2 == 7457 || apu_cycles_sc2 == 11186 || apu_cycles_sc2 == 18641) && (readFromMem(0x4017) >> 7) == 0)) {
 
 				if (!SC2envelopeStart) {
 					SC2envelopeDivider--;
@@ -331,7 +341,7 @@ void stepSC2(uint8_t c) {
 			}
 
 			//	Length Counter & Sweep
-			if (apu_cycles == 7456 || apu_cycles == 14915) {
+			if (apu_cycles_sc2 == 7456 || apu_cycles_sc2 == 14915) {
 
 				//	Length Counter - NOT halted by flag
 				if ((readFromMem(0x4004) & 0b00010000) == 0x00) {
@@ -364,7 +374,7 @@ void stepSC2(uint8_t c) {
 			}
 
 			//	wrap
-			apu_cycles %= 14915;
+			apu_cycles_sc2 %= 14915;
 
 			//	handle timer
 			if (SC2timer <= 0x00) {
@@ -403,10 +413,84 @@ void stepSC2(uint8_t c) {
 
 }
 
-//	WAVE channel
+//	TRIANGLE channel
 void stepSC3(uint8_t c) {
+	while (c--) {
+		SC3pcFS++;
+		if (SC3pcFS % 2 == 0) {
+			apu_cycles_sc3++;
+			//	Length Counter
+			if (apu_cycles_sc3 == 7456 || apu_cycles_sc3 == 14915) {
 
+				//	Length Counter - NOT halted by flag
+				if ((readFromMem(0x4000) & 0b00010000) == 0x00) {
+					//	length > 0
+					if (SC3len) {
+						SC3len--;
+					}
+					else {
+						SC3enabled = false;
+					}
+				}
+			}
+
+			//	Linear Counter
+			if (((apu_cycles_sc3 == 3729 || apu_cycles_sc3 == 7457 || apu_cycles_sc3 == 11186 || apu_cycles_sc3 == 14915) && (readFromMem(0x4017) >> 7)) ||
+				((apu_cycles_sc3 == 3729 || apu_cycles_sc3 == 7457 || apu_cycles_sc3 == 11186 || apu_cycles_sc3 == 18641) && (readFromMem(0x4017) >> 7) == 0)) {
+
+				if (SC3linearReload) {
+					SC3linearCounter = SC3linearReloadValue;
+				}
+				else if (SC3linearCounter > 0) {
+					SC3linearCounter--;
+				}
+				if (!SC3controlFlag) {
+					SC3linearReload = false;
+				}
+
+			}
+			//	wrap
+			apu_cycles_sc3 %= 14915;
+		}
+
+		//	handle timer
+		if (SC3timer == 0x00) {
+			SC3timer = SC3timerTarget;
+
+			if (SC3linearCounter && SC3len) {
+
+				//++SC3ampIndex %= 32;
+				SC3ampIndex = (SC3ampIndex + 1) & 0x1F;
+
+				//	handle amp from table
+				if (SC3timerTarget >= 2 && SC3timerTarget <= 0x7ff) {
+					SC3freq = SC3triangleAmps[SC3ampIndex];
+				}
+			}
+
+		}
+		else {
+			SC3timer--;
+		}
+
+		if(SC3pcFS %2 == 0){
+			if (!--SC3pcc) {
+				SC3pcc = frames_per_sample;
+				//	enabled channel
+				if (SC3enabled && (readFromMem(0x4015) & 0x4)) {
+					SC3buf.push_back((float)SC3freq / 100);
+					SC3buf.push_back((float)SC3freq / 100);
+				}
+				//	disabled channel
+				else {
+					SC3buf.push_back(0);
+					SC3buf.push_back(0);
+				}
+			}
+		}
+	}
 }
+
 
 //	Noise channel
 void stepSC4(uint8_t c) {
@@ -425,14 +509,14 @@ void stepAPU(unsigned char cycles) {
 
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
-			if (useSC2)
-				res += SC2buf.at(i) * volume;
-			if (useSC2)
-				res += SC2buf.at(i) * volume;
-			if (useSC2)
-				res += SC2buf.at(i) * volume;
-			if (useSC2)
-				res += SC2buf.at(i) * volume;
+			if (useSC3)
+				res += SC3buf.at(i) * volume;
+			/*if (useSC3)
+				res += SC3buf.at(i) * volume;
+			if (useSC3)
+				res += SC3buf.at(i) * volume;
+			if (useSC3)
+				res += SC3buf.at(i) * volume;*/
 			/*if (useSC2)
 				res += SC2buf.at(i) * volume;
 			if (useSC3)
@@ -496,7 +580,7 @@ void stopSPU() {
 	SC4freq = 0;
 	SC1dutyIndex = 0;
 	SC2dutyIndex = 0;
-	SC3waveIndex = 0;
+	SC3ampIndex = 0;
 	SC1pcc = frames_per_sample;
 	SC2pcc = frames_per_sample;
 	SC3pcc = frames_per_sample;
@@ -567,7 +651,6 @@ void resetSC2length(uint8_t val) {
 	SC2enabled = true;
 	SC2timerTarget = ((readFromMem(0x4007) & 0b111) << 8) | readFromMem(0x4006);
 	SC2timer = 0;
-	printf("Target T: %d %d\n", SC2timerTarget, val);
 	SC2dutyIndex = 0;
 }
 
@@ -585,16 +668,19 @@ void resetSC2hi() {
 
 //	reloads the length counter for SC3, with all the other according settings
 void resetSC3length(uint8_t val) {
-	uint16_t r = (((readFromMem(0xff1e) & 7) << 8) | readFromMem(0xff1d));
-	SC3timer = (2048 - r) * 2;
-	if (!SC3len)
-		SC3len = 256 - val;
+	SC3len = length_table[val >> 3];
+	SC3timerTarget = ((readFromMem(0x400b) & 0b111) << 8) | readFromMem(0x400a);
+	SC3linearReload = true;
 	SC3enabled = true;
-	SC3waveIndex = 0;
+}
 
-	//	disable channel if dac is off
-	if ((readFromMem(0xff1a) >> 6) == 0x0)
-		SC3enabled = false;
+void resetSC3hi() {
+	SC3timerTarget = ((readFromMem(0x400b) & 0b111) << 8) | readFromMem(0x400a);
+}
+
+void resetSC3linearReload() {
+	SC3controlFlag = (readFromMem(0x4008) & 0x80) == 0x80;
+	SC3linearReloadValue = readFromMem(0x4008) & 0x7f;
 }
 
 //	reloads the length counter for SC4, with all the other according settings
