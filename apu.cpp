@@ -27,7 +27,8 @@ int16_t SC2timer = 0x00;
 int16_t SC2timerTarget = 0x00;
 int16_t SC3timer = 0x00;
 int16_t SC3timerTarget = 0x00;
-uint32_t SC4timer = 0x00;
+int16_t SC4timer = 0x00;
+int16_t SC4timerTarget = 0x00;
 int16_t SC1amp = 0;
 int16_t SC2amp = 0;
 int16_t SC3amp = 0;
@@ -59,21 +60,25 @@ int16_t SC1envelopeDivider = 0;
 int16_t SC1envelopeVol = 0;
 int16_t SC2envelopeDivider = 0;
 int16_t SC2envelopeVol = 0;
+int16_t SC4envelopeDivider = 0;
+int16_t SC4envelopeVol = 0;
 bool SC1enabled = false;
 bool SC2enabled = false;
 bool SC3enabled = false;
 bool SC4enabled = false;
 bool SC1envelopeStart = false;
 bool SC2envelopeStart = false;
-bool SC4envelopeEnabled = false;
+bool SC4envelopeStart = false;
 bool SC1sweepReload = false;
 bool SC2sweepReload = false;
 bool SC1sweepEnabled = false;
 bool SC2sweepEnabled = false;
 bool SC1constantVolFlag = false;
+bool SC4constantVolFlag = false;
 int8_t SC1sweepPeriod = 0;
 int8_t SC2sweepPeriod = 0;
 int8_t SC1constantVol = 0;
+int8_t SC4constantVol = 0;
 uint32_t SC1sweepShadow = 0;
 uint32_t SC2sweepShadow = 0;
 int16_t SC1sweepDivider = 0;
@@ -82,11 +87,12 @@ int16_t SC1envelope = 0;
 int16_t SC2envelope = 0;
 uint8_t SC4envelope = 0;
 uint8_t SC4divisor[8] = { 8, 16, 32, 48, 64, 80, 96, 112 };
-uint16_t SC4lfsr = 0;
+uint16_t SC4lfsr = 1;
 uint16_t SC3linearCounter = 0;
 uint16_t SC3linearReloadValue = 0;
 bool SC3linearReload = false;
 bool SC3controlFlag = false;
+bool SC4modeFlag = false;
 uint16_t apu_cycles_sc1 = 0;
 uint16_t apu_cycles_sc2 = 0;
 uint16_t apu_cycles_sc3 = 0;
@@ -122,6 +128,14 @@ uint8_t SC3triangleAmps[32] = { 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 
 //	length table
 uint16_t length_table[0x20] = {
 	10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14, 12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30
+};
+
+//	noise table(s)
+uint8_t noise_ntsc[0x10] = {
+	 4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
+};
+uint8_t noise_pal[0x10] = {
+	 4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708,  944, 1890, 3778
 };
 
 uint16_t sweepCalc();
@@ -501,6 +515,106 @@ void stepSC3(uint8_t c) {
 //	Noise channel
 void stepSC4(uint8_t c) {
 
+	while (c--) {
+
+		//	Frame Sequencer (every other CPU tick = 1 APU tick)
+		/*	mode 0:     mode 1 :	 function
+			-------- -  ---------- - ---------------------------- -
+			- - - f		- - - - -	 IRQ(if bit 6 is clear)
+			- l - l		- l - - l    Length counter and sweep
+			e e e e     e e e - e    Envelope and linear counter
+		*/
+		SC4pcFS++;
+		if (SC4pcFS % 2 == 0) {
+			apu_cycles_sc4++;
+
+			if (((apu_cycles_sc4 == 3729 || apu_cycles_sc4 == 7457 || apu_cycles_sc4 == 11186 || apu_cycles_sc4 == 14915) && (readFromMem(0x4017) >> 7)) ||
+				((apu_cycles_sc4 == 3729 || apu_cycles_sc4 == 7457 || apu_cycles_sc4 == 11186 || apu_cycles_sc4 == 18641) && (readFromMem(0x4017) >> 7) == 0)) {
+
+				if (!SC4envelopeStart) {
+					SC4envelopeDivider--;
+					if (SC4envelopeDivider < 0) {
+						SC4envelopeDivider = readFromMem(0x400c) & 0b1111;
+						if (SC4envelope > 0) {
+							SC4envelope--;
+							SC4envelopeVol = SC4envelope;
+						}
+						else {
+							SC4envelopeVol = SC4envelope;
+							if (readFromMem(0x400c) & 0b100000) {
+								SC4envelope = 15;
+							}
+						}
+					}
+				}
+				else {
+					SC4envelopeStart = false;
+					SC4envelope = 15;
+					SC4envelopeDivider = readFromMem(0x400c) & 0b1111;
+				}
+			}
+
+			if (SC4constantVolFlag) {
+				SC4amp = SC4constantVol;
+			}
+			else {
+				SC4amp = SC4envelopeVol;
+			}
+
+			//	Length Counter & Sweep
+			if (apu_cycles_sc4 == 7456 || apu_cycles_sc4 == 14915) {
+
+				//	Length Counter - NOT halted by flag
+				if ((readFromMem(0x400c) & 0x20) == 0x00) {
+					//	length > 0
+					if (SC4len) {
+						SC4len--;
+					}
+				}
+
+			}
+			if (SC4len <= 0) {
+				SC4enabled = false;
+			}
+
+			//	wrap
+			apu_cycles_sc4 %= 14915;
+
+			//	handle timer
+			if (SC4timer <= 0x00) {
+				SC4timer = SC4timerTarget;
+
+				//	calc lsfr
+				/*When the timer clocks the shift register, the following actions occur in order:
+
+				Feedback is calculated as the exclusive-OR of bit 0 and one other bit: bit 6 if Mode flag is set, otherwise bit 1.
+				The shift register is shifted right by one bit.
+				Bit 14, the leftmost bit, is set to the feedback calculated earlier.*/
+				uint16_t feedback = (SC4modeFlag) ? (SC4lfsr & 1) ^ ((SC4lfsr >> 6) & 1) : (SC4lfsr & 1) ^ ((SC4lfsr >> 1) & 1);
+				SC4lfsr >>= 1;
+				SC4lfsr |= feedback << 14;
+			}
+			else {
+				SC4timer--;
+			}
+
+
+			if (!--SC4pcc) {
+				SC4pcc = frames_per_sample;
+				//	enabled channel
+				if (SC4enabled && (readFromMem(0x4015) & 0b1000) && SC4len) {
+					SC4buf.push_back((SC4lfsr & 1) ? 0 : ((float)SC4amp / 100));
+					SC4buf.push_back((SC4lfsr & 1) ? 0 : ((float)SC4amp / 100));
+				}
+				//	disabled channel
+				else {
+					SC4buf.push_back(0);
+					SC4buf.push_back(0);
+				}
+			}
+
+		}
+	}
 
 }
 
@@ -511,12 +625,12 @@ void stepAPU(unsigned char cycles) {
 	stepSC3(cycles);
 	stepSC4(cycles);
 
-	if (SC1buf.size() >= 100) { //&& SC2buf.size() >= 100 && SC3buf.size() >= 100 && SC4buf.size() >= 100) {
+	if (SC4buf.size() >= 100) { //&& SC2buf.size() >= 100 && SC3buf.size() >= 100 && SC4buf.size() >= 100) {
 
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
-			if (useSC1)
-				res += SC1buf.at(i) * volume;
+			if (useSC4)
+				res += SC4buf.at(i) * volume;
 			/*if (useSC2)
 				res += SC2buf.at(i) * volume;
 			if (useSC3)
@@ -603,14 +717,14 @@ void stopSPU() {
 	SC4enabled = false;
 	SC1envelopeStart = false;
 	SC2envelopeStart = false;
-	SC4envelopeEnabled = false;
+	SC4envelopeStart = false;
 	SC1sweepReload = false;
 	SC1sweepPeriod = 0;
 	SC1sweepShadow = 0;
 	SC1envelope = 0;
 	SC2envelope = 0;
 	SC4envelope = 0;
-	SC4lfsr = 0;
+	SC4lfsr = 1;
 }
 
 //	reloads the length counter for SC1, with all the other according settings
@@ -692,19 +806,18 @@ void resetSC3linearReload() {
 
 //	reloads the length counter for SC4, with all the other according settings
 void resetSC4length(uint8_t val) {
-
-	if (!SC4len)
-		SC4len = 64 - val;
+	SC4len = length_table[val >> 3];
 	SC4enabled = true;
-	SC4timer = SC4divisor[readFromMem(0xff22) & 0x7] << (readFromMem(0xff22) >> 4);
-	SC4lfsr = 0x7fff;
-	SC4amp = readFromMem(0xff21) >> 4;
-	SC4envelope = readFromMem(0xff21) & 7;
-	SC4envelopeEnabled = true;
+}
 
-	//	disable channel if dac is off
-	if ((readFromMem(0xff21) >> 3) == 0x0)
-		SC4enabled = false;
+void resetSC4hi() {
+	SC4timerTarget = noise_pal[(readFromMem(0x400e) & 0b1111)];
+	SC4modeFlag = (readFromMem(0x400e) & 0x80) == 0x80;
+}
+
+void resetSC4Ctrl() {
+	SC4constantVol = readFromMem(0x400c) & 0b1111;
+	SC4constantVolFlag = (readFromMem(0x400c) & 0x10) == 0x10;
 }
 
 void resetChannelEnables() {

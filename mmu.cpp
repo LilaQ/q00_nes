@@ -213,6 +213,18 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			mapper->write(adr, val);
 			resetSC3length(val);
 			break;
+		case 0x400c:		//	SC4 CTRL
+			mapper->write(adr, val);
+			resetSC4Ctrl();
+			break;
+		case 0x400e:		//	SC4 HI
+			mapper->write(adr, val);
+			resetSC4hi();
+			break;
+		case 0x400f:		//	SC4 LENGTH
+			mapper->write(adr, val);
+			resetSC4length(val);
+			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, mapper->memory);
 			break;
