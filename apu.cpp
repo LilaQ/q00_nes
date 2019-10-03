@@ -295,7 +295,7 @@ void stepSC1(uint8_t c) {
 			if (!--SC1pcc) {
 				SC1pcc = frames_per_sample;
 				//	enabled channel
-				if (SC1enabled && (readFromMem(0x4015) & 0b1)) {
+				if (SC1enabled && (readFromMem(0x4015) & 0b1) && SC1len) {
 					SC1buf.push_back((float)SC1freq / 100);
 					SC1buf.push_back((float)SC1freq / 100);
 				}
@@ -417,7 +417,7 @@ void stepSC2(uint8_t c) {
 			if (!--SC2pcc) {
 				SC2pcc = frames_per_sample;
 				//	enabled channel
-				if (SC2enabled) {
+				if (SC2enabled && SC2len) {
 					SC2buf.push_back((float)SC2freq / 100);
 					SC2buf.push_back((float)SC2freq / 100);
 				}
@@ -497,7 +497,7 @@ void stepSC3(uint8_t c) {
 			if (!--SC3pcc) {
 				SC3pcc = frames_per_sample;
 				//	enabled channel
-				if (SC3enabled && (readFromMem(0x4015) & 0x4)) {
+				if (SC3enabled && (readFromMem(0x4015) & 0x4) && SC3len) {
 					SC3buf.push_back((float)SC3freq / 100);
 					SC3buf.push_back((float)SC3freq / 100);
 				}
@@ -625,18 +625,18 @@ void stepAPU(unsigned char cycles) {
 	stepSC3(cycles);
 	stepSC4(cycles);
 
-	if (SC4buf.size() >= 100) { //&& SC2buf.size() >= 100 && SC3buf.size() >= 100 && SC4buf.size() >= 100) {
+	if (SC1buf.size() >= 100 && SC2buf.size() >= 100 && SC3buf.size() >= 100 && SC4buf.size() >= 100) {
 
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
-			if (useSC4)
-				res += SC4buf.at(i) * volume;
-			/*if (useSC2)
+			if (useSC1)
+				res += SC1buf.at(i) * volume;
+			if (useSC2)
 				res += SC2buf.at(i) * volume;
 			if (useSC3)
-				res += SC3buf.at(i) * volume;*/
-			/*if (useSC3)
-				res += SC3buf.at(i) * volume;*/
+				res += SC3buf.at(i) * volume;
+			if (useSC4)
+				res += SC4buf.at(i) * volume;
 			Mixbuf.push_back(res);
 		}
 		//	send audio data to device; buffer is times 4, because we use floats now, which have 4 bytes per float, and buffer needs to have information of amount of bytes to be used
@@ -742,7 +742,7 @@ Square 1's sweep does several things (see frequency sweep).
 */
 void resetSC1length(uint8_t val) {
 	SC1len = length_table[(val >> 3) & 0b11111];
-	SC1enabled = true;
+	SC1enabled = SC1len > 0;
 	SC1timerTarget = ((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002);
 	SC1dutyIndex = 0;
 }
@@ -768,7 +768,7 @@ void resetSC1Ctrl() {
 //	reloads the length counter for SC2, with all the other according settings
 void resetSC2length(uint8_t val) {
 	SC2len = length_table[val >> 3];
-	SC2enabled = true;
+	SC2enabled = SC2len > 0;
 	SC2timerTarget = ((readFromMem(0x4007) & 0b111) << 8) | readFromMem(0x4006);
 	SC2timer = 0;
 	SC2dutyIndex = 0;
@@ -792,7 +792,7 @@ void resetSC3length(uint8_t val) {
 	SC3len = length_table[val >> 3];
 	SC3timerTarget = ((readFromMem(0x400b) & 0b111) << 8) | readFromMem(0x400a);
 	SC3linearReload = true;
-	SC3enabled = true;
+	SC3enabled = SC3len > 0;
 }
 
 void resetSC3hi() {
@@ -828,6 +828,9 @@ void resetChannelEnables() {
 		SC2len = 0;
 	}
 	if ((readFromMem(0x4015) & 0b100) == 0) {
+		SC3len = 0;
+	}
+	if ((readFromMem(0x4015) & 0b1000) == 0) {
 		SC3len = 0;
 	}
 }
