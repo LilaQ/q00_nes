@@ -68,8 +68,12 @@ bool SC2envelopeStart = false;
 bool SC4envelopeEnabled = false;
 bool SC1sweepReload = false;
 bool SC2sweepReload = false;
+bool SC1sweepEnabled = false;
+bool SC2sweepEnabled = false;
+bool SC1constantVolFlag = false;
 int8_t SC1sweepPeriod = 0;
 int8_t SC2sweepPeriod = 0;
+int8_t SC1constantVol = 0;
 uint32_t SC1sweepShadow = 0;
 uint32_t SC2sweepShadow = 0;
 int16_t SC1sweepDivider = 0;
@@ -211,8 +215,8 @@ void stepSC1(uint8_t c) {
 				}
 			}
 
-			if (readFromMem(0x4000) & 0b10000) {
-				SC1amp = readFromMem(0x4000) & 0b1111;
+			if (SC1constantVolFlag) {
+				SC1amp = SC1constantVol;
 			}
 			else {
 				SC1amp = SC1envelopeVol;
@@ -222,26 +226,25 @@ void stepSC1(uint8_t c) {
 			if (apu_cycles_sc1 == 7456 || apu_cycles_sc1 == 14915) {
 
 				//	Length Counter - NOT halted by flag
-				if ((readFromMem(0x4000) & 0b00010000) == 0x00) {
+				if ((readFromMem(0x4000) & 0x20) == 0x00) {
 					//	length > 0
 					if (SC1len) {
 						SC1len--;
 					}
-					else {
-						SC1enabled = false;
-					}
 				}
 
 				//	Sweep
-				if ((readFromMem(0x4001) & 0b10000000)) {
+				if (SC1sweepEnabled) {
 					SC1sweepDivider--;
 					if (SC1sweepDivider < 0) {
 						int16_t post = SC1timerTarget >> (readFromMem(0x4001) & 0b111);
 						int8_t neg = (readFromMem(0x4001) & 0b1000) ? -1 : 1;
 						int16_t sum = (uint16_t)(post * neg);
 						SC1timerTarget = SC1timerTarget + sum;
-						if (SC1timerTarget >= 0x7ff || SC1timerTarget <= 0) {
+						if (SC1timerTarget >= 0x7ff || SC1timerTarget <= 8) {
 							SC1amp = 0;
+							writeToMem(0x4001, readFromMem(0x4001) & 0x7f);		//	< --  TODO SC2
+							SC1enabled = false;									//	< --  TODO SC2
 						}
 					}
 					if(SC1sweepDivider < 0 || SC1sweepReload) {
@@ -249,6 +252,9 @@ void stepSC1(uint8_t c) {
 						SC1sweepDivider = (readFromMem(0x4001) >> 4) & 0b111;
 					}
 				}
+			}
+			if (SC1len <= 0) {
+				SC1enabled = false;
 			}
 
 			//	wrap
@@ -275,7 +281,7 @@ void stepSC1(uint8_t c) {
 			if (!--SC1pcc) {
 				SC1pcc = frames_per_sample;
 				//	enabled channel
-				if (SC1enabled) {
+				if (SC1enabled && (readFromMem(0x4015) & 0b1)) {
 					SC1buf.push_back((float)SC1freq / 100);
 					SC1buf.push_back((float)SC1freq / 100);
 				}
@@ -355,14 +361,14 @@ void stepSC2(uint8_t c) {
 				}
 
 				//	Sweep
-				if ((readFromMem(0x4005) & 0b10000000)) {
+				if (SC2sweepEnabled) {
 					SC2sweepDivider--;
 					if (SC2sweepDivider < 0) {
 						int16_t post = SC2timerTarget >> (readFromMem(0x4005) & 0b111);
 						int8_t neg = (readFromMem(0x4005) & 0b1000) ? -1 : 1;
 						int16_t sum = (uint16_t)(post * neg);
 						SC2timerTarget = SC2timerTarget + sum;
-						if (SC2timerTarget >= 0x7ff || SC2timerTarget <= 0) {
+						if (SC2timerTarget >= 0x7ff || SC2timerTarget <= 8) {
 							SC2amp = 0;
 						}
 					}
@@ -509,20 +515,14 @@ void stepAPU(unsigned char cycles) {
 
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
-			if (useSC3)
-				res += SC3buf.at(i) * volume;
-			/*if (useSC3)
-				res += SC3buf.at(i) * volume;
-			if (useSC3)
-				res += SC3buf.at(i) * volume;
-			if (useSC3)
-				res += SC3buf.at(i) * volume;*/
+			if (useSC1)
+				res += SC1buf.at(i) * volume;
 			/*if (useSC2)
 				res += SC2buf.at(i) * volume;
 			if (useSC3)
-				res += SC3buf.at(i) * volume;
-			if (useSC4)
-				res += SC4buf.at(i) * volume;*/
+				res += SC3buf.at(i) * volume;*/
+			/*if (useSC3)
+				res += SC3buf.at(i) * volume;*/
 			Mixbuf.push_back(res);
 		}
 		//	send audio data to device; buffer is times 4, because we use floats now, which have 4 bytes per float, and buffer needs to have information of amount of bytes to be used
@@ -627,7 +627,7 @@ Noise channel's LFSR bits are all set to 1.
 Square 1's sweep does several things (see frequency sweep).
 */
 void resetSC1length(uint8_t val) {
-	SC1len = length_table[val >> 3];
+	SC1len = length_table[(val >> 3) & 0b11111];
 	SC1enabled = true;
 	SC1timerTarget = ((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002);
 	SC1dutyIndex = 0;
@@ -639,10 +639,16 @@ void resetSC1Envelope() {
 
 void resetSC1Sweep() {
 	SC1sweepReload = true;
+	SC1sweepEnabled = (readFromMem(0x4001) & 0x80) == 0x80;
 }
 
 void resetSC1hi() {
 	SC1timerTarget = ((readFromMem(0x4003) & 0b111) << 8) | readFromMem(0x4002);
+}
+
+void resetSC1Ctrl() {
+	SC1constantVol = readFromMem(0x4000) & 0b1111;
+	SC1constantVolFlag = (readFromMem(0x4000) & 0x10) == 0x10;
 }
 
 //	reloads the length counter for SC2, with all the other according settings
@@ -660,6 +666,7 @@ void resetSC2Envelope() {
 
 void resetSC2Sweep() {
 	SC2sweepReload = true;
+	SC2sweepEnabled = (readFromMem(0x4005) & 0x80) == 0x80;
 }
 
 void resetSC2hi() {
@@ -698,4 +705,16 @@ void resetSC4length(uint8_t val) {
 	//	disable channel if dac is off
 	if ((readFromMem(0xff21) >> 3) == 0x0)
 		SC4enabled = false;
+}
+
+void resetChannelEnables() {
+	if ((readFromMem(0x4015) & 0b1) == 0) {
+		SC1len = 0;
+	}
+	if ((readFromMem(0x4015) & 0b10) == 0) {
+		SC2len = 0;
+	}
+	if ((readFromMem(0x4015) & 0b100) == 0) {
+		SC3len = 0;
+	}
 }

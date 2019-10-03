@@ -13,3 +13,5 @@ void resetSC1hi();
 void resetSC2hi();
 void resetSC3hi();
 void resetSC3linearReload();
+void resetSC1Ctrl();
+void resetChannelEnables();

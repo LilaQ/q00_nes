@@ -171,6 +171,10 @@ void writeToMem(uint16_t adr, uint8_t val) {
 		case 0x2007:		//	PPUDATA
 			writePPUDATA(val);
 			break;
+		case 0x4000:
+			mapper->write(adr, val);
+			resetSC1Ctrl();
+			break;
 		case 0x4001:		//	SC1 SWEEP
 			mapper->write(adr, val);
 			resetSC1Sweep();
@@ -211,6 +215,10 @@ void writeToMem(uint16_t adr, uint8_t val) {
 			break;
 		case 0x4014:		//	OAM DMA
 			oamDMAtransfer(val, mapper->memory);
+			break;
+		case 0x4015:		//	SC1/2/3/4 Enable / Disable
+			mapper->write(adr, val);
+			resetChannelEnables();
 			break;
 		case 0x4016:		//	enable / disable input polling
 			poll_input_1 = val;
