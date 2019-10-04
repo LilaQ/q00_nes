@@ -543,7 +543,7 @@ void renderScanline(uint16_t row) {
 	}
 
 	if (PPU_MASK.show_sprites) {
-		for (int i = 0; i <= 63; i++) {
+		for (int i = 63; i >= 0; i--) {
 			Y_Pos = OAM[i * 4] + 1;
 			Tile_Index_Nr = OAM[i * 4 + 1];
 			Attributes = OAM[i * 4 + 2];

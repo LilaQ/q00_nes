@@ -811,7 +811,7 @@ void resetSC4length(uint8_t val) {
 }
 
 void resetSC4hi() {
-	SC4timerTarget = noise_pal[(readFromMem(0x400e) & 0b1111)];
+	SC4timerTarget = noise_ntsc[(readFromMem(0x400e) & 0b1111)];
 	SC4modeFlag = (readFromMem(0x400e) & 0x80) == 0x80;
 }
 
